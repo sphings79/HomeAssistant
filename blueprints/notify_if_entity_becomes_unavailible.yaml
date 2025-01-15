@@ -1,20 +1,22 @@
 blueprint:
-  name: "Benachrichtigung bei nicht verfügbaren Entitäten"
+  name: "Benachrichtigung bei nicht verfügbaren Entitäten oder Geräten"
   description: >
-    Sendet eine Benachrichtigung, wenn ausgewählte Entitäten für eine bestimmte Zeit nicht verfügbar sind.
-    Du kannst wählen, ob bei jeder einzelnen Entität oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt wird.
+    Sendet eine Benachrichtigung, wenn ausgewählte Entitäten oder Geräte für eine bestimmte Zeit nicht verfügbar sind.
+    Du kannst wählen, ob bei jedem einzelnen Element oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt wird.
   domain: automation
   input:
-    entities:
-      name: "Entitäten"
-      description: "Wähle die Entitäten aus, die überwacht werden sollen."
+    monitored_items:
+      name: "Zu überwachende Elemente"
+      description: "Wähle die Entitäten oder Geräte aus, die überwacht werden sollen."
       selector:
         target:
           entity:
             domain: *
+          device:
+            integration: *
     unavailable_time:
       name: "Zeit in Sekunden"
-      description: "Wie lange die Entität(en) nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
+      description: "Wie lange die Elemente nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
       default: 10
       selector:
         number:
@@ -24,7 +26,7 @@ blueprint:
           mode: slider
     use_friendly_name:
       name: "Friendly Name verwenden"
-      description: "Wenn aktiviert, wird der Friendly Name der Entität in der Benachrichtigung verwendet."
+      description: "Wenn aktiviert, wird der Friendly Name des Elements in der Benachrichtigung verwendet."
       default: false
       selector:
         boolean: {}
@@ -40,7 +42,7 @@ blueprint:
           custom_value: true
     notify_mode:
       name: "Benachrichtigungsmodus"
-      description: "Wähle, ob bei jeder einzelnen Entität oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt werden soll."
+      description: "Wähle, ob bei jedem einzelnen Element oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt werden soll."
       default: "individual"
       selector:
         select:
@@ -60,8 +62,8 @@ blueprint:
           mode: slider
     custom_message:
       name: "Benutzerdefinierte Nachricht für 'Alle zusammen'"
-      description: "Gib hier deine benutzerdefinierte Nachricht ein, die gesendet wird, wenn alle Entitäten nicht verfügbar sind."
-      default: "Alle überwachten Entitäten sind nicht verfügbar!"
+      description: "Gib hier deine benutzerdefinierte Nachricht ein, die gesendet wird, wenn alle Elemente nicht verfügbar sind."
+      default: "Alle überwachten Elemente sind nicht verfügbar!"
       selector:
         text:
           multiline: true
@@ -73,7 +75,7 @@ blueprint:
         boolean: {}
 
 variables:
-  entities: !input entities
+  monitored_items: !input monitored_items
   use_friendly_name: !input use_friendly_name
   unavailable_time: !input unavailable_time
   notify_mode: !input notify_mode
@@ -82,7 +84,7 @@ variables:
 
 trigger:
   - platform: state
-    entity_id: !input entities
+    entity_id: "{{ monitored_items.entity_id }}"
     to: "unavailable"
     for:
       seconds: !input unavailable_time
@@ -92,12 +94,12 @@ condition:
     value_template: >
       {% if notify_mode == 'all' %}
         {% set unavailable_count = 0 %}
-        {% for entity in entities %}
+        {% for entity in monitored_items.entity_id %}
           {% if states(entity) == 'unavailable' %}
             {% set unavailable_count = unavailable_count + 1 %}
           {% endif %}
         {% endfor %}
-        {{ unavailable_count == entities|length }}
+        {{ unavailable_count == monitored_items.entity_id|length }}
       {% else %}
         true
       {% endif %}
@@ -113,12 +115,12 @@ action:
               friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
           - service: !input notify_service
             data:
-              title: "Entität nicht verfügbar"
+              title: "Element nicht verfügbar"
               message: >
                 {% if use_friendly_name and friendly_name is not none %}
-                  Die Entität "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
+                  Das Element "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
                 {% else %}
-                  Die Entität "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
+                  Das Element "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
                 {% endif %}
               data:
                 push:
@@ -126,7 +128,7 @@ action:
     default:
       - service: !input notify_service
         data:
-          title: "Alle überwachten Entitäten nicht verfügbar"
+          title: "Alle überwachten Elemente nicht verfügbar"
           message: "{{ custom_message }}"
           data:
             push:
