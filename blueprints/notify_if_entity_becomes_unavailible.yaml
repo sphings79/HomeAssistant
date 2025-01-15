@@ -11,9 +11,9 @@ blueprint:
       selector:
         target:
           entity:
-            domain: *
+            domain: 
           device:
-            integration: *
+            integration: 
     unavailable_time:
       name: "Zeit in Sekunden"
       description: "Wie lange die Elemente nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
@@ -37,7 +37,7 @@ blueprint:
         select:
           options:
             - notify.mobile_app_<your_device_name>
-            - notify.pushbullet
+            - notify.pushover
             - notify.telegram
           custom_value: true
     notify_mode:
