@@ -11,7 +11,6 @@ blueprint:
       selector:
         entity:
           multiple: true
-          domain: *
     unavailable_time:
       name: "Zeit in Sekunden"
       description: "Wie lange die Elemente nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
