@@ -9,8 +9,11 @@ blueprint:
       name: "Zu überwachende Elemente"
       description: "Wähle die Entitäten oder Geräte aus, die überwacht werden sollen."
       selector:
-        entity:
-          multiple: true
+        target:
+          entity:
+            domain: "*"
+          device:
+            integration: "*"
     unavailable_time:
       name: "Zeit in Sekunden"
       description: "Wie lange die Elemente nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
@@ -31,12 +34,8 @@ blueprint:
       name: "Benachrichtigungsdienst"
       description: "Wähle den Benachrichtigungsdienst aus, um die Nachricht zu senden."
       selector:
-        select:
-          options:
-            - notify.mobile_app_<your_device_name>
-            - notify.pushbullet
-            - notify.telegram
-          custom_value: true
+        service:
+          domain: notify
     notify_mode:
       name: "Benachrichtigungsmodus"
       description: "Wähle, ob bei jedem einzelnen Element oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt werden soll."
@@ -81,7 +80,7 @@ variables:
 
 trigger:
   - platform: state
-    entity_id: "{{ monitored_items.entity_id }}"
+    entity_id: "{{ expand(monitored_items.entity_id) | map(attribute='entity_id') | list }}"
     to: "unavailable"
     for:
       seconds: !input unavailable_time
@@ -91,12 +90,13 @@ condition:
     value_template: >
       {% if notify_mode == 'all' %}
         {% set unavailable_count = 0 %}
-        {% for entity in monitored_items.entity_id %}
+        {% set entities = expand(monitored_items.entity_id) | map(attribute='entity_id') | list %}
+        {% for entity in entities %}
           {% if states(entity) == 'unavailable' %}
             {% set unavailable_count = unavailable_count + 1 %}
           {% endif %}
         {% endfor %}
-        {{ unavailable_count == monitored_items.entity_id|length }}
+        {{ unavailable_count == entities | length }}
       {% else %}
         true
       {% endif %}
