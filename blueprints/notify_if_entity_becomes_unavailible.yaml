@@ -7,13 +7,15 @@ blueprint:
   input:
     monitored_entities:
       name: "Zu überwachende Entitäten"
-      description: "Wähle die Entitäten aus, die überwacht werden sollen."
+      description: "Wähle die Entitäten aus, die überwacht werden sollen. (Optional)"
+      default: []
       selector:
         entity:
           multiple: true
     monitored_devices:
       name: "Zu überwachende Geräte"
-      description: "Wähle die Geräte aus, die überwacht werden sollen."
+      description: "Wähle die Geräte aus, die überwacht werden sollen. (Optional)"
+      default: []
       selector:
         device:
           multiple: true
@@ -40,7 +42,7 @@ blueprint:
         select:
           options:
             - notify.mobile_app_<your_device_name>
-            - notify.pushbullet
+            - notify.pushover
             - notify.telegram
           custom_value: true
     notify_mode:
@@ -97,6 +99,8 @@ trigger:
       seconds: !input unavailable_time
 
 condition:
+  - condition: template
+    value_template: "{{ all_entities | length > 0 }}"
   - condition: template
     value_template: >
       {% if notify_mode == 'all' %}
