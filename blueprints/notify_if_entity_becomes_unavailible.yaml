@@ -5,15 +5,18 @@ blueprint:
     Du kannst wählen, ob bei jedem einzelnen Element oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt wird.
   domain: automation
   input:
-    monitored_items:
-      name: "Zu überwachende Elemente"
-      description: "Wähle die Entitäten oder Geräte aus, die überwacht werden sollen."
+    monitored_entities:
+      name: "Zu überwachende Entitäten"
+      description: "Wähle die Entitäten aus, die überwacht werden sollen."
       selector:
-        target:
-          entity:
-            domain: "*"
-          device:
-            integration: "*"
+        entity:
+          multiple: true
+    monitored_devices:
+      name: "Zu überwachende Geräte"
+      description: "Wähle die Geräte aus, die überwacht werden sollen."
+      selector:
+        device:
+          multiple: true
     unavailable_time:
       name: "Zeit in Sekunden"
       description: "Wie lange die Elemente nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
@@ -75,16 +78,20 @@ blueprint:
         boolean: {}
 
 variables:
-  monitored_items: !input monitored_items
+  monitored_entities: !input monitored_entities
+  monitored_devices: !input monitored_devices
   use_friendly_name: !input use_friendly_name
   unavailable_time: !input unavailable_time
   notify_mode: !input notify_mode
   custom_message: !input custom_message
   critical_notification: !input critical_notification
+  all_entities: >
+    {{ monitored_entities | list + 
+       (expand(monitored_devices) | map(attribute='entity_id') | list) }}
 
 trigger:
   - platform: state
-    entity_id: "{{ expand(monitored_items.entity_id) | map(attribute='entity_id') | list }}"
+    entity_id: "{{ all_entities }}"
     to: "unavailable"
     for:
       seconds: !input unavailable_time
@@ -94,13 +101,12 @@ condition:
     value_template: >
       {% if notify_mode == 'all' %}
         {% set unavailable_count = 0 %}
-        {% set entities = expand(monitored_items.entity_id) | map(attribute='entity_id') | list %}
-        {% for entity in entities %}
+        {% for entity in all_entities %}
           {% if states(entity) == 'unavailable' %}
             {% set unavailable_count = unavailable_count + 1 %}
           {% endif %}
         {% endfor %}
-        {{ unavailable_count == entities | length }}
+        {{ unavailable_count == all_entities | length }}
       {% else %}
         true
       {% endif %}
