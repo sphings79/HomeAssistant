@@ -35,7 +35,7 @@ blueprint:
         select:
           options:
             - notify.mobile_app_<your_device_name>
-            - notify.pushbullet
+            - notify.pushover
             - notify.telegram
           custom_value: true
     notify_mode:
@@ -65,6 +65,12 @@ blueprint:
       selector:
         text:
           multiline: true
+    critical_notification:
+      name: "Kritische Benachrichtigung"
+      description: "Wenn aktiviert, wird die Benachrichtigung als kritisch gesendet."
+      default: false
+      selector:
+        boolean: {}
 
 variables:
   entities: !input entities
@@ -72,6 +78,7 @@ variables:
   unavailable_time: !input unavailable_time
   notify_mode: !input notify_mode
   custom_message: !input custom_message
+  critical_notification: !input critical_notification
 
 trigger:
   - platform: state
@@ -113,11 +120,17 @@ action:
                 {% else %}
                   Die Entität "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
                 {% endif %}
+              data:
+                push:
+                  category: "{{ 'critical' if critical_notification else '' }}"
     default:
       - service: !input notify_service
         data:
           title: "Alle überwachten Entitäten nicht verfügbar"
           message: "{{ custom_message }}"
+          data:
+            push:
+              category: "{{ 'critical' if critical_notification else '' }}"
 
 mode: parallel
 max: !input max_notifications
