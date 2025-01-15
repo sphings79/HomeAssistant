@@ -1,0 +1,61 @@
+blueprint:
+  name: "Benachrichtigung bei nicht verfügbarer Entität"
+  description: >
+    Sendet eine Benachrichtigung, wenn eine oder mehrere ausgewählte Entitäten
+    für eine bestimmte Zeit nicht verfügbar sind. Du kannst die Zeit einstellen
+    und wählen, ob der Name oder der Friendly Name der Entität in der Nachricht verwendet wird.
+  domain: automation
+  input:
+    entities:
+      name: "Entitäten"
+      description: "Wähle die Entitäten aus, die überwacht werden sollen."
+      selector:
+        target:
+          entity:
+            domain: "*"
+    unavailable_time:
+      name: "Zeit in Sekunden"
+      description: "Wie lange die Entität nicht verfügbar sein muss, bevor die Benachrichtigung ausgelöst wird."
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 3600
+          unit_of_measurement: seconds
+          mode: slider
+    use_friendly_name:
+      name: "Friendly Name verwenden"
+      description: >
+        Wenn aktiviert, wird der Friendly Name der Entität in der Benachrichtigung verwendet.
+        Andernfalls wird der technische Name (entity_id) angezeigt.
+      default: false
+      selector:
+        boolean: {}
+    notify_service:
+      name: "Benachrichtigungsdienst"
+      description: "Wähle den Benachrichtigungsdienst aus, um die Nachricht zu senden."
+      selector:
+        service:
+          domain: notify
+
+trigger:
+  - platform: state
+    entity_id: !input entities
+    to: "unavailable"
+    for:
+      seconds: !input unavailable_time
+
+action:
+  - variables:
+      entity_id: "{{ trigger.entity_id }}"
+      friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+  - service: !input notify_service
+    data:
+      title: "Entität nicht verfügbar"
+      message: >
+        {% if is_input('use_friendly_name') and friendly_name is not none %}
+          Die Entität "{{ friendly_name }}" ist seit mehr als {{ states('input_number.unavailable_time') }} Sekunden nicht verfügbar.
+        {% else %}
+          Die Entität "{{ entity_id }}" ist seit mehr als {{ states('input_number.unavailable_time') }} Sekunden nicht verfügbar.
+        {% endif %}
+mode: single
