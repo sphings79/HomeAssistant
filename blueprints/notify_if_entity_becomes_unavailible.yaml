@@ -95,13 +95,20 @@ variables:
       {{ [] }}
     {% endif %}
   all_entities: >
-    {{ (monitored_entities + device_entities) | unique | list }}
+    {{ (monitored_entities + device_entities) | unique | reject('eq', '') | list }}
+  trigger_entities: >
+    {% set entities = all_entities | reject('eq', '') %}
+    {% if entities | length > 0 %}
+      {{ entities | join(', ') }}
+    {% else %}
+      non_existent_entity
+    {% endif %}
   debug_entities: >
     {{ logger.info("Überwachte Entitäten: " ~ all_entities) }}
 
 trigger:
   - platform: state
-    entity_id: "{{ all_entities | reject('eq', '') | join(', ') if all_entities else 'non_existent_entity' }}"
+    entity_id: "{{ trigger_entities }}"
     to: "unavailable"
     for:
       seconds: !input unavailable_time
