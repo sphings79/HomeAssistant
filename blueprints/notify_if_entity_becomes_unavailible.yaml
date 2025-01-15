@@ -1,9 +1,8 @@
 blueprint:
-  name: "Benachrichtigung bei nicht verfügbarer Entität"
+  name: "Benachrichtigung bei nicht verfügbaren Entitäten"
   description: >
-    Sendet eine Benachrichtigung, wenn eine oder mehrere ausgewählte Entitäten
-    für eine bestimmte Zeit nicht verfügbar sind. Du kannst die Zeit einstellen
-    und wählen, ob der Name oder der Friendly Name der Entität in der Nachricht verwendet wird.
+    Sendet eine Benachrichtigung, wenn ausgewählte Entitäten für eine bestimmte Zeit nicht verfügbar sind.
+    Du kannst wählen, ob bei jeder einzelnen Entität oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt wird.
   domain: automation
   input:
     entities:
@@ -15,7 +14,7 @@ blueprint:
             domain: "*"
     unavailable_time:
       name: "Zeit in Sekunden"
-      description: "Wie lange die Entität nicht verfügbar sein muss, bevor die Benachrichtigung ausgelöst wird."
+      description: "Wie lange die Entität(en) nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
       default: 10
       selector:
         number:
@@ -25,9 +24,7 @@ blueprint:
           mode: slider
     use_friendly_name:
       name: "Friendly Name verwenden"
-      description: >
-        Wenn aktiviert, wird der Friendly Name der Entität in der Benachrichtigung verwendet.
-        Andernfalls wird der technische Name (entity_id) angezeigt.
+      description: "Wenn aktiviert, wird der Friendly Name der Entität in der Benachrichtigung verwendet."
       default: false
       selector:
         boolean: {}
@@ -41,6 +38,40 @@ blueprint:
             - notify.pushbullet
             - notify.telegram
           custom_value: true
+    notify_mode:
+      name: "Benachrichtigungsmodus"
+      description: "Wähle, ob bei jeder einzelnen Entität oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt werden soll."
+      default: "individual"
+      selector:
+        select:
+          options:
+            - label: "Einzeln"
+              value: "individual"
+            - label: "Alle zusammen"
+              value: "all"
+    max_notifications:
+      name: "Maximale Anzahl der Benachrichtigungen"
+      description: "Die maximale Anzahl der zu sendenden Benachrichtigungen."
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+    custom_message:
+      name: "Benutzerdefinierte Nachricht für 'Alle zusammen'"
+      description: "Gib hier deine benutzerdefinierte Nachricht ein, die gesendet wird, wenn alle Entitäten nicht verfügbar sind."
+      default: "Alle überwachten Entitäten sind nicht verfügbar!"
+      selector:
+        text:
+          multiline: true
+
+variables:
+  entities: !input entities
+  use_friendly_name: !input use_friendly_name
+  unavailable_time: !input unavailable_time
+  notify_mode: !input notify_mode
+  custom_message: !input custom_message
 
 trigger:
   - platform: state
@@ -49,22 +80,44 @@ trigger:
     for:
       seconds: !input unavailable_time
 
-variables:
-  entity_id: "{{ trigger.entity_id }}"
-  friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
-  use_friendly_name: !input use_friendly_name
-  unavailable_time: !input unavailable_time
+condition:
+  - condition: template
+    value_template: >
+      {% if notify_mode == 'all' %}
+        {% set unavailable_count = 0 %}
+        {% for entity in entities %}
+          {% if states(entity) == 'unavailable' %}
+            {% set unavailable_count = unavailable_count + 1 %}
+          {% endif %}
+        {% endfor %}
+        {{ unavailable_count == entities|length }}
+      {% else %}
+        true
+      {% endif %}
 
 action:
-  - service: !input notify_service
-    data:
-      title: "Entität nicht verfügbar"
-      message: >
-        {% if use_friendly_name and friendly_name is not none %}
-          Die Entität "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
-        {% else %}
-          Die Entität "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
-        {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ notify_mode == 'individual' }}"
+        sequence:
+          - variables:
+              entity_id: "{{ trigger.entity_id }}"
+              friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+          - service: !input notify_service
+            data:
+              title: "Entität nicht verfügbar"
+              message: >
+                {% if use_friendly_name and friendly_name is not none %}
+                  Die Entität "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
+                {% else %}
+                  Die Entität "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
+                {% endif %}
+    default:
+      - service: !input notify_service
+        data:
+          title: "Alle überwachten Entitäten nicht verfügbar"
+          message: "{{ custom_message }}"
 
 mode: parallel
-max: 10
+max: !input max_notifications
