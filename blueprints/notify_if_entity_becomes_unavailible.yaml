@@ -38,11 +38,12 @@ blueprint:
     notify_service:
       name: "Benachrichtigungsdienst"
       description: "Wähle den Benachrichtigungsdienst aus, um die Nachricht zu senden."
+      default: "notify.mobile_app_<your_device_name>"
       selector:
         select:
           options:
             - notify.mobile_app_<your_device_name>
-            - notify.pushover
+            - notify.pushbullet
             - notify.telegram
           custom_value: true
     notify_mode:
@@ -80,20 +81,27 @@ blueprint:
         boolean: {}
 
 variables:
-  monitored_entities: !input monitored_entities
-  monitored_devices: !input monitored_devices
+  monitored_entities: "{{ monitored_entities | default([]) }}"
+  monitored_devices: "{{ monitored_devices | default([]) }}"
   use_friendly_name: !input use_friendly_name
   unavailable_time: !input unavailable_time
   notify_mode: !input notify_mode
   custom_message: !input custom_message
   critical_notification: !input critical_notification
+  device_entities: >
+    {% if monitored_devices %}
+      {{ monitored_devices | map('device_entities') | sum(start=[]) }}
+    {% else %}
+      {{ [] }}
+    {% endif %}
   all_entities: >
-    {{ monitored_entities | list + 
-       (expand(monitored_devices) | map(attribute='entity_id') | list) }}
+    {{ (monitored_entities + device_entities) | unique | list }}
+  debug_entities: >
+    {{ logger.info("Überwachte Entitäten: " ~ all_entities) }}
 
 trigger:
   - platform: state
-    entity_id: "{{ all_entities }}"
+    entity_id: "{{ all_entities | reject('eq', '') | join(', ') if all_entities else 'non_existent_entity' }}"
     to: "unavailable"
     for:
       seconds: !input unavailable_time
