@@ -34,8 +34,12 @@ blueprint:
       name: "Benachrichtigungsdienst"
       description: "Wähle den Benachrichtigungsdienst aus, um die Nachricht zu senden."
       selector:
-        service:
-          domain: notify
+        select:
+          options:
+            - notify.mobile_app_<your_device_name>
+            - notify.pushbullet
+            - notify.telegram
+          custom_value: true
     notify_mode:
       name: "Benachrichtigungsmodus"
       description: "Wähle, ob bei jedem einzelnen Element oder nur wenn alle zusammen nicht verfügbar sind, benachrichtigt werden soll."
