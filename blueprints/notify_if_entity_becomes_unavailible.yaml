@@ -8,10 +8,10 @@ blueprint:
     entities:
       name: "Entitäten"
       description: "Wähle die Entitäten aus, die überwacht werden sollen."
-      target:
-        selector:
+      selector:
+        target:
           entity:
-            multiple: true
+            domain: *
 
     unavailable_time:
       name: "Zeit in Sekunden"
