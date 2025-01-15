@@ -12,7 +12,6 @@ blueprint:
         target:
           entity:
             domain: *
-
     unavailable_time:
       name: "Zeit in Sekunden"
       description: "Wie lange die Entität(en) nicht verfügbar sein müssen, bevor die Benachrichtigung ausgelöst wird."
@@ -36,7 +35,7 @@ blueprint:
         select:
           options:
             - notify.mobile_app_<your_device_name>
-            - notify.pushover
+            - notify.pushbullet
             - notify.telegram
           custom_value: true
     notify_mode:
