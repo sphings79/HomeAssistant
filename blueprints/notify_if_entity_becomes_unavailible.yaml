@@ -35,8 +35,12 @@ blueprint:
       name: "Benachrichtigungsdienst"
       description: "Wähle den Benachrichtigungsdienst aus, um die Nachricht zu senden."
       selector:
-        service:
-          domain: notify
+        select:
+          options:
+            - notify.mobile_app_<your_device_name>
+            - notify.pushbullet
+            - notify.telegram
+          custom_value: true
 
 trigger:
   - platform: state
@@ -45,17 +49,22 @@ trigger:
     for:
       seconds: !input unavailable_time
 
+variables:
+  entity_id: "{{ trigger.entity_id }}"
+  friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+  use_friendly_name: !input use_friendly_name
+  unavailable_time: !input unavailable_time
+
 action:
-  - variables:
-      entity_id: "{{ trigger.entity_id }}"
-      friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
   - service: !input notify_service
     data:
       title: "Entität nicht verfügbar"
       message: >
-        {% if is_input('use_friendly_name') and friendly_name is not none %}
-          Die Entität "{{ friendly_name }}" ist seit mehr als {{ states('input_number.unavailable_time') }} Sekunden nicht verfügbar.
+        {% if use_friendly_name and friendly_name is not none %}
+          Die Entität "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
         {% else %}
-          Die Entität "{{ entity_id }}" ist seit mehr als {{ states('input_number.unavailable_time') }} Sekunden nicht verfügbar.
+          Die Entität "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
         {% endif %}
-mode: single
+
+mode: parallel
+max: 10
