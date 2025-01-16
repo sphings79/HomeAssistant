@@ -96,39 +96,36 @@ variables:
     {% endif %}
   all_entities: >
     {{ (monitored_entities + device_entities) | unique | reject('eq', '') | list }}
-  trigger_entities: >
-    {% set entities = all_entities | reject('eq', '') %}
-    {% if entities | length > 0 %}
-      {{ entities | join(', ') }}
-    {% else %}
-      non_existent_entity
-    {% endif %}
   debug_entities: >
     {{ logger.info("Überwachte Entitäten: " ~ all_entities) }}
 
 trigger:
-  - platform: state
-    entity_id: "{{ trigger_entities }}"
-    to: "unavailable"
+  - platform: template
+    value_template: >
+      {% for entity in all_entities %}
+        {% if states(entity) == 'unavailable' %}
+          true
+        {% endif %}
+      {% endfor %}
     for:
       seconds: !input unavailable_time
 
 condition:
   - condition: template
     value_template: "{{ all_entities | length > 0 }}"
-  - condition: template
-    value_template: >
-      {% if notify_mode == 'all' %}
-        {% set unavailable_count = 0 %}
-        {% for entity in all_entities %}
-          {% if states(entity) == 'unavailable' %}
-            {% set unavailable_count = unavailable_count + 1 %}
-          {% endif %}
-        {% endfor %}
-        {{ unavailable_count == all_entities | length }}
-      {% else %}
-        true
-      {% endif %}
+  - condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ notify_mode != 'all' }}"
+      - condition: template
+        value_template: >
+          {% set unavailable_count = 0 %}
+          {% for entity in all_entities %}
+            {% if states(entity) == 'unavailable' %}
+              {% set unavailable_count = unavailable_count + 1 %}
+            {% endif %}
+          {% endfor %}
+          {{ unavailable_count == all_entities | length }}
 
 action:
   - choose:
@@ -137,8 +134,14 @@ action:
             value_template: "{{ notify_mode == 'individual' }}"
         sequence:
           - variables:
-              entity_id: "{{ trigger.entity_id }}"
-              friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+              unavailable_entity: >
+                {% for entity in all_entities %}
+                  {% if states(entity) == 'unavailable' %}
+                    {{ entity }}
+                    {% break %}
+                  {% endif %}
+                {% endfor %}
+              friendly_name: "{{ state_attr(unavailable_entity, 'friendly_name') }}"
           - service: !input notify_service
             data:
               title: "Element nicht verfügbar"
@@ -146,7 +149,7 @@ action:
                 {% if use_friendly_name and friendly_name is not none %}
                   Das Element "{{ friendly_name }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
                 {% else %}
-                  Das Element "{{ entity_id }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
+                  Das Element "{{ unavailable_entity }}" ist seit mehr als {{ unavailable_time }} Sekunden nicht verfügbar.
                 {% endif %}
               data:
                 push:
