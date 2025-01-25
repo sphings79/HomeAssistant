@@ -21,10 +21,10 @@ blueprint:
           mode: box
     notify_service:
       name: Benachrichtigungsdienst
-      description: Wähle den Benachrichtigungsdienst für die Nachricht.
+      description: Gib den Namen des Benachrichtigungsdienstes ein (z. B. notify.mobile_app_telefon).
+      default: "notify.mobile_app_telefon"
       selector:
-        service:
-          domain: notify
+        text:
 
 trigger:
   - platform: time_pattern
