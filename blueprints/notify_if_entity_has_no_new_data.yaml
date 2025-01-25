@@ -1,0 +1,55 @@
+blueprint:
+  name: Benachrichtigung bei inaktiven Entitäten
+  description: Benachrichtigt, wenn ausgewählte Entitäten über einen einstellbaren Zeitraum keine neuen Werte erhalten haben.
+  domain: automation
+  input:
+    entities:
+      name: Zu überwachende Entitäten
+      description: Wähle eine oder mehrere Entitäten aus, die überwacht werden sollen.
+      selector:
+        entity:
+          multiple: true
+    duration:
+      name: Zeitspanne in Minuten
+      description: Zeitspanne, nach der die Benachrichtigung ausgelöst wird, falls keine Aktualisierung erfolgt.
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: Minuten
+          mode: box
+    notify_service:
+      name: Benachrichtigungsdienst
+      description: Wähle den Benachrichtigungsdienst für die Nachricht.
+      selector:
+        service:
+          domain: notify
+
+trigger:
+  - platform: time_pattern
+    minutes: "/5"  # Überprüft alle 5 Minuten
+
+condition:
+  - condition: template
+    value_template: >
+      {% set threshold = now() - timedelta(minutes=duration | int) %}
+      {% for entity_id in entities %}
+        {% if states[entity_id] is not none and states[entity_id].last_updated < threshold %}
+          {{ true }}
+        {% endif %}
+      {% endfor %}
+      {{ false }}
+
+action:
+  - service: !input notify_service
+    data:
+      title: "Inaktive Entität(en)"
+      message: >
+        Folgende Entitäten wurden seit über {{ duration }} Minuten nicht aktualisiert:
+        {% for entity_id in entities %}
+          {% if states[entity_id] is not none and states[entity_id].last_updated < (now() - timedelta(minutes=duration | int)) %}
+            - {{ state_attr(entity_id, 'friendly_name') or entity_id }}
+          {% endif %}
+        {% endfor %}
+mode: single
