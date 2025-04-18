@@ -1,13 +1,8 @@
 blueprint:
-  name: Luftfeuchtigkeit Differenz & Staus Lüften
+  name: Luftfeuchtigkeit Status & Differenz
   description: Erstellt zwei Template-Sensoren für Lüftungsstatus und Feuchtigkeitsdifferenz eines Raumes.
   domain: template
   input:
-    raum_name:
-      name: Raumname
-      description: Anzeigename des Raums (z.B. "Bad EG")
-      selector:
-        text:
     sensor_raum:
       name: Sensor Raum
       description: Entität für absolute Luftfeuchtigkeit im Raum (z.B. sensor.thermal_comfort_bad_eg_absolute_luftfeuchtigkeit)
@@ -20,11 +15,31 @@ blueprint:
       selector:
         entity:
           domain: sensor
+    status_name:
+      name: Name Status Sensor
+      description: Anzeigename für den Status-Sensor (z.B. "Bad EG Status lüften")
+      selector:
+        text:
+    status_unique_id:
+      name: Unique ID Status Sensor
+      description: Eindeutige ID für den Status-Sensor (z.B. "bad_eg_status_luften")
+      selector:
+        text:
+    diff_name:
+      name: Name Differenz Sensor
+      description: Anzeigename für den Differenz-Sensor (z.B. "Bad EG Luftfeuchtigkeit Differenz")
+      selector:
+        text:
+    diff_unique_id:
+      name: Unique ID Differenz Sensor
+      description: Eindeutige ID für den Differenz-Sensor (z.B. "bad_eg_luftfeuchtigkeit_differenz")
+      selector:
+        text:
 
 template:
   - sensor:
-      - name: !input raum_name ~ " Status lüften"
-        unique_id: !input sensor_raum ~ "_status_luften"
+      - name: !input status_name
+        unique_id: !input status_unique_id
         state: >
           {% set diff = states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) %}
           {% if diff > 0.5 %}
@@ -32,7 +47,7 @@ template:
           {% else %}
             NICHT OK
           {% endif %}
-      - name: !input raum_name ~ " Luftfeuchtigkeit Differenz"
-        unique_id: !input sensor_raum ~ "_luftfeuchtigkeit_differenz"
+      - name: !input diff_name
+        unique_id: !input diff_unique_id
         state: >
           {{ states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) }}
