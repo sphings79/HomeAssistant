@@ -1,0 +1,38 @@
+blueprint:
+  name: Luftfeuchtigkeit Differenz & Staus Lüften
+  description: Erstellt zwei Template-Sensoren für Lüftungsstatus und Feuchtigkeitsdifferenz eines Raumes.
+  domain: template
+  input:
+    raum_name:
+      name: Raumname
+      description: Anzeigename des Raums (z.B. "Bad EG")
+      selector:
+        text:
+    sensor_raum:
+      name: Sensor Raum
+      description: Entität für absolute Luftfeuchtigkeit im Raum (z.B. sensor.thermal_comfort_bad_eg_absolute_luftfeuchtigkeit)
+      selector:
+        entity:
+          domain: sensor
+    sensor_aussen:
+      name: Sensor Außen
+      description: Entität für absolute Luftfeuchtigkeit außen (z.B. sensor.thermal_comfort_garten_absolute_luftfeuchtigkeit)
+      selector:
+        entity:
+          domain: sensor
+
+template:
+  - sensor:
+      - name: !input raum_name ~ " Status lüften"
+        unique_id: !input sensor_raum ~ "_status_luften"
+        state: >
+          {% set diff = states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) %}
+          {% if diff > 0.5 %}
+            OK
+          {% else %}
+            NICHT OK
+          {% endif %}
+      - name: !input raum_name ~ " Luftfeuchtigkeit Differenz"
+        unique_id: !input sensor_raum ~ "_luftfeuchtigkeit_differenz"
+        state: >
+          {{ states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) }}
