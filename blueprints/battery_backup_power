@@ -5,35 +5,42 @@ blueprint:
   input:
     entity_today:
       name: Sensor für heutige Prognose
+      description: Sensor, der die Energieprognose für heute liefert
       selector:
         entity:
           domain: sensor
     entity_tomorrow:
       name: Sensor für morgige Prognose
+      description: Sensor, der die Energieprognose für morgen liefert
       selector:
         entity:
           domain: sensor
     entity_d2:
       name: Sensor für Übermorgen
+      description: Sensor, der die Energieprognose für übermorgen liefert
       selector:
         entity:
           domain: sensor
     entity_d3:
       name: Sensor für in 3 Tagen
+      description: Sensor, der die Energieprognose für in drei Tagen liefert
       selector:
         entity:
           domain: sensor
     backup_target:
       name: Backup Power Ziel-Entität
+      description: Entität zur Einstellung des Batterie-Backup-Werts
       selector:
         entity:
           domain: number
     notify_service:
       name: Benachrichtigungsdienst
+      description: Dienst für die Benachrichtigung (z. B. mobile App)
       selector:
         text:
     min_backup:
       name: Minimaler Backup-Wert (%)
+      description: Untergrenze für den Batterie-Backup-Wert in Prozent
       default: 12
       selector:
         number:
@@ -42,6 +49,7 @@ blueprint:
           unit_of_measurement: "%"
     max_backup:
       name: Maximaler Backup-Wert (%)
+      description: Obergrenze für den Batterie-Backup-Wert in Prozent
       default: 30
       selector:
         number:
@@ -50,6 +58,7 @@ blueprint:
           unit_of_measurement: "%"
     min_forecast:
       name: Minimaler Prognosewert (kWh)
+      description: Untergrenze für die Energieprognose in kWh
       default: 5
       selector:
         number:
@@ -58,6 +67,7 @@ blueprint:
           unit_of_measurement: "kWh"
     max_forecast:
       name: Maximaler Prognosewert (kWh)
+      description: Obergrenze für die Energieprognose in kWh
       default: 25
       selector:
         number:
@@ -66,6 +76,7 @@ blueprint:
           unit_of_measurement: "kWh"
     cutoff_hour:
       name: Uhrzeit-Schwelle (Stunde)
+      description: Stunde des Tages, ab der die heutige Prognose ignoriert wird
       default: 12
       selector:
         number:
@@ -86,10 +97,10 @@ condition: []
 action:
   - variables:
       now_hour: "{{ now().hour }}"
-      forecast_today: "{{ states(entity_today) | float(0) }}"
-      forecast_tomorrow: "{{ states(entity_tomorrow) | float(0) }}"
-      forecast_d2: "{{ states(entity_d2) | float(0) }}"
-      forecast_d3: "{{ states(entity_d3) | float(0) }}"
+      forecast_today: "{{ states(!input entity_today) | float(0) }}"
+      forecast_tomorrow: "{{ states(!input entity_tomorrow) | float(0) }}"
+      forecast_d2: "{{ states(!input entity_d2) | float(0) }}"
+      forecast_d3: "{{ states(!input entity_d3) | float(0) }}"
       min_f: !input min_forecast
       max_f: !input max_forecast
       min_b: !input min_backup
@@ -124,7 +135,7 @@ action:
         {% endif %}
         {{ [min_b, [total | round(0), max_b] | min] | max }}
 
-      current_value: "{{ states(backup_target) | int(0) }}"
+      current_value: "{{ states(!input backup_target) | int(0) }}"
 
   - choose:
       - conditions:
