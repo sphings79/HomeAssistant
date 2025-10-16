@@ -83,36 +83,46 @@ trigger:
 
 variables:
   now_hour: "{{ now().hour }}"
-  forecast_today: "{{ states(!input entity_today) | float(0) }}"
-  forecast_tomorrow: "{{ states(!input entity_tomorrow) | float(0) }}"
-  forecast_d2: "{{ states(!input entity_d2) | float(0) }}"
-  forecast_d3: "{{ states(!input entity_d3) | float(0) }}"
-  min_f: !input min_forecast
-  max_f: !input max_forecast
-  min_b: !input min_backup
-  max_b: !input max_backup
+  min_f: {{ input.min_forecast }}
+  max_f: {{ input.max_forecast }}
+  min_b: {{ input.min_backup }}
+  max_b: {{ input.max_backup }}
+  cutoff: {{ input.cutoff_hour }}
 
-  def_backup: >
-    {% macro calc(f) %}
-      {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
-      {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
-    {% endmacro %}
-    {{ calc }}
+  forecast_today: "{{ states(input.entity_today) | float(0) }}"
+  forecast_tomorrow: "{{ states(input.entity_tomorrow) | float(0) }}"
+  forecast_d2: "{{ states(input.entity_d2) | float(0) }}"
+  forecast_d3: "{{ states(input.entity_d3) | float(0) }}"
 
-  backup_today: "{{ def_backup(forecast_today) }}"
-  backup_tomorrow: "{{ def_backup(forecast_tomorrow) }}"
-  backup_d2: "{{ def_backup(forecast_d2) }}"
-  backup_d3: "{{ def_backup(forecast_d3) }}"
+  backup_today: >
+    {% set f = forecast_today | float %}
+    {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+    {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+  backup_tomorrow: >
+    {% set f = forecast_tomorrow | float %}
+    {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+    {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+  backup_d2: >
+    {% set f = forecast_d2 | float %}
+    {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+    {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+  backup_d3: >
+    {% set f = forecast_d3 | float %}
+    {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+    {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
 
   backup_total: >
-    {% if now_hour < (cutoff_hour | int) %}
+    {% if now_hour < cutoff %}
       {% set total = (backup_today + backup_tomorrow + backup_d2 + backup_d3) / 4 %}
     {% else %}
       {% set total = (backup_tomorrow + backup_d2 + backup_d3) / 3 %}
     {% endif %}
     {{ [min_b, [total | round(0), max_b] | min] | max }}
 
-  current_value: "{{ states(!input backup_target) | int(0) }}"
+  current_value: "{{ states(input.backup_target) | int(0) }}"
 
 condition:
   - condition: template
@@ -129,7 +139,7 @@ action:
       title: 🔋 Batterie-Backup angepasst
       message: >
         Backup Power wurde auf {{ backup_total }} % gesetzt.
-        {% if now_hour < (cutoff_hour | int) %}
+        {% if now_hour < cutoff %}
           Heute: {{ forecast_today }} kWh,
         {% endif %}
         Morgen: {{ forecast_tomorrow }} kWh, Übermorgen: {{ forecast_d2 }} kWh,
