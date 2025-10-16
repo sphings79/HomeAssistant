@@ -89,7 +89,7 @@ variables:
   forecast_d3: "{{ states(!input entity_d3) | float(0) }}"
 
   backup_today: >
-    {% set f = forecast_today %}
+    {% set f = forecast_today | float %}
     {% set min_f = !input min_forecast %}
     {% set max_f = !input max_forecast %}
     {% set min_b = !input min_backup %}
@@ -98,7 +98,7 @@ variables:
     {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
 
   backup_tomorrow: >
-    {% set f = forecast_tomorrow %}
+    {% set f = forecast_tomorrow | float %}
     {% set min_f = !input min_forecast %}
     {% set max_f = !input max_forecast %}
     {% set min_b = !input min_backup %}
@@ -107,7 +107,7 @@ variables:
     {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
 
   backup_d2: >
-    {% set f = forecast_d2 %}
+    {% set f = forecast_d2 | float %}
     {% set min_f = !input min_forecast %}
     {% set max_f = !input max_forecast %}
     {% set min_b = !input min_backup %}
@@ -116,7 +116,7 @@ variables:
     {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
 
   backup_d3: >
-    {% set f = forecast_d3 %}
+    {% set f = forecast_d3 | float %}
     {% set min_f = !input min_forecast %}
     {% set max_f = !input max_forecast %}
     {% set min_b = !input min_backup %}
@@ -157,4 +157,3 @@ action:
         {% endif %}
         Morgen: {{ forecast_tomorrow }} kWh, Übermorgen: {{ forecast_d2 }} kWh,
         In 3 Tagen: {{ forecast_d3 }} kWh.
-``
