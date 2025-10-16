@@ -1,78 +1,149 @@
-alias: Batterie-Backup dynamisch (konfigurierbar)
-description: Dynamische Anpassung des Batterie-Backup-Werts basierend auf Energieprognose
+blueprint:
+  name: Batterie-Backup dynamisch mit Prognose
+  description: Dynamische Anpassung des Batterie-Backup-Werts basierend auf Energieprognose
+  domain: automation
+  input:
+    entity_today:
+      name: Sensor für heutige Prognose
+      selector:
+        entity:
+          domain: sensor
+    entity_tomorrow:
+      name: Sensor für morgige Prognose
+      selector:
+        entity:
+          domain: sensor
+    entity_d2:
+      name: Sensor für Übermorgen
+      selector:
+        entity:
+          domain: sensor
+    entity_d3:
+      name: Sensor für in 3 Tagen
+      selector:
+        entity:
+          domain: sensor
+    backup_target:
+      name: Backup Power Ziel-Entität
+      selector:
+        entity:
+          domain: number
+    notify_service:
+      name: Benachrichtigungsdienst
+      selector:
+        text:
+    min_backup:
+      name: Minimaler Backup-Wert (%)
+      default: 12
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    max_backup:
+      name: Maximaler Backup-Wert (%)
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    min_forecast:
+      name: Minimaler Prognosewert (kWh)
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "kWh"
+    max_forecast:
+      name: Maximaler Prognosewert (kWh)
+      default: 25
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "kWh"
+    cutoff_hour:
+      name: Uhrzeit-Schwelle (Stunde)
+      default: 12
+      selector:
+        number:
+          min: 0
+          max: 23
+          unit_of_measurement: "h"
+
 trigger:
   - platform: state
     entity_id:
-      - sensor.energy_production_today
-      - sensor.energy_production_tomorrow
-      - sensor.energy_production_d2
-      - sensor.energy_production_d3
+      - !input entity_today
+      - !input entity_tomorrow
+      - !input entity_d2
+      - !input entity_d3
 
-variables:
-  # Konfiguration
-  min_forecast: 5
-  max_forecast: 25
-  min_backup: 12
-  max_backup: 30
-  cutoff_hour: 12
-
-  # Sensorwerte
-  forecast_today: "{{ states('sensor.energy_production_today') | float(0) }}"
-  forecast_tomorrow: "{{ states('sensor.energy_production_tomorrow') | float(0) }}"
-  forecast_d2: "{{ states('sensor.energy_production_d2') | float(0) }}"
-  forecast_d3: "{{ states('sensor.energy_production_d3') | float(0) }}"
-  now_hour: "{{ now().hour }}"
-
-  # Berechnung Backup pro Tag
-  backup_today: >
-    {% set f = forecast_today %}
-    {% if f < min_forecast %}{% set f = min_forecast %}{% elif f > max_forecast %}{% set f = max_forecast %}{% endif %}
-    {{ [min_backup, [((max_forecast - f) / (max_forecast - min_forecast) * (max_backup - min_backup) + min_backup) | round(0), max_backup] | min] | max }}
-
-  backup_tomorrow: >
-    {% set f = forecast_tomorrow %}
-    {% if f < min_forecast %}{% set f = min_forecast %}{% elif f > max_forecast %}{% set f = max_forecast %}{% endif %}
-    {{ [min_backup, [((max_forecast - f) / (max_forecast - min_forecast) * (max_backup - min_backup) + min_backup) | round(0), max_backup] | min] | max }}
-
-  backup_d2: >
-    {% set f = forecast_d2 %}
-    {% if f < min_forecast %}{% set f = min_forecast %}{% elif f > max_forecast %}{% set f = max_forecast %}{% endif %}
-    {{ [min_backup, [((max_forecast - f) / (max_forecast - min_forecast) * (max_backup - min_backup) + min_backup) | round(0), max_backup] | min] | max }}
-
-  backup_d3: >
-    {% set f = forecast_d3 %}
-    {% if f < min_forecast %}{% set f = min_forecast %}{% elif f > max_forecast %}{% set f = max_forecast %}{% endif %}
-    {{ [min_backup, [((max_forecast - f) / (max_forecast - min_forecast) * (max_backup - min_backup) + min_backup) | round(0), max_backup] | min] | max }}
-
-  # Durchschnitt berechnen
-  backup_total: >
-    {% if now_hour < cutoff_hour %}
-      {% set total = (backup_today + backup_tomorrow + backup_d2 + backup_d3) / 4 %}
-    {% else %}
-      {% set total = (backup_tomorrow + backup_d2 + backup_d3) / 3 %}
-    {% endif %}
-    {{ [min_backup, [total | round(0), max_backup] | min] | max }}
-
-  current_value: "{{ states('number.batterien_backup_power_ladestand') | int(0) }}"
-
-condition:
-  - condition: template
-    value_template: "{{ backup_total != current_value }}"
+condition: []
 
 action:
-  - service: number.set_value
-    target:
-      entity_id: number.batterien_backup_power_ladestand
-    data:
-      value: "{{ backup_total }}"
-  - service: notify.mobile_app_iphone_16_pro_max_von_dennis
-    data:
-      title: 🔋 Batterie-Backup angepasst
-      message: >
-        Backup Power wurde auf {{ backup_total }} % gesetzt.
-        {% if now_hour < cutoff_hour %}
-          Heute: {{ forecast_today }} kWh,
+  - variables:
+      now_hour: "{{ now().hour }}"
+      forecast_today: "{{ states(entity_today) | float(0) }}"
+      forecast_tomorrow: "{{ states(entity_tomorrow) | float(0) }}"
+      forecast_d2: "{{ states(entity_d2) | float(0) }}"
+      forecast_d3: "{{ states(entity_d3) | float(0) }}"
+      min_f: !input min_forecast
+      max_f: !input max_forecast
+      min_b: !input min_backup
+      max_b: !input max_backup
+      cutoff: !input cutoff_hour
+
+      backup_today: >
+        {% set f = forecast_today %}
+        {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+        {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+      backup_tomorrow: >
+        {% set f = forecast_tomorrow %}
+        {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+        {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+      backup_d2: >
+        {% set f = forecast_d2 %}
+        {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+        {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+      backup_d3: >
+        {% set f = forecast_d3 %}
+        {% if f < min_f %}{% set f = min_f %}{% elif f > max_f %}{% set f = max_f %}{% endif %}
+        {{ [min_b, [((max_f - f) / (max_f - min_f) * (max_b - min_b) + min_b) | round(0), max_b] | min] | max }}
+
+      backup_total: >
+        {% if now_hour < cutoff %}
+          {% set total = (backup_today + backup_tomorrow + backup_d2 + backup_d3) / 4 %}
+        {% else %}
+          {% set total = (backup_tomorrow + backup_d2 + backup_d3) / 3 %}
         {% endif %}
-        Morgen: {{ forecast_tomorrow }} kWh, Übermorgen: {{ forecast_d2 }} kWh,
-        In 3 Tagen: {{ forecast_d3 }} kWh.
+        {{ [min_b, [total | round(0), max_b] | min] | max }}
+
+      current_value: "{{ states(backup_target) | int(0) }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ backup_total != current_value }}"
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input backup_target
+            data:
+              value: "{{ backup_total }}"
+          - service: !input notify_service
+            data:
+              title: "🔋 Batterie-Backup angepasst"
+              message: >
+                Backup Power wurde auf {{ backup_total }} % gesetzt.
+                {% if now_hour < cutoff %}
+                  Heute: {{ forecast_today }} kWh,
+                {% endif %}
+                Morgen: {{ forecast_tomorrow }} kWh, Übermorgen: {{ forecast_d2 }} kWh,
+                In 3 Tagen: {{ forecast_d3 }} kWh.
 mode: single
