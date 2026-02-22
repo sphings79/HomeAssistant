@@ -1,0 +1,147 @@
+blueprint:
+  name: iPixel Multi-Entity Rotierendes Display (mit Farbverlauf)
+  description: >
+    Zeigt mehrere Sensorwerte nacheinander auf einem iPixel Display an.
+    Jeder Eintrag hat eigenen Text, unteren/oberen Wert, unteren/oberen RGB-Farbwert.
+    Dazwischen wird automatisch ein Farbverlauf berechnet.
+    Wechselintervall frei einstellbar (2–180 Sekunden).
+    Automatischer Whitespace-Trick beim Wechsel verhindert Farbflackern.
+    Perfekt für iPixel BLE Display (text + light.color).
+
+  domain: automation
+
+  input:
+    display_entity:
+      name: Display Text-Entity
+      description: Die Text-Entity deines iPixel Displays (z.B. text.display).
+      selector:
+        entity:
+          domain: text
+
+    color_entity:
+      name: Display Farb-Entity
+      description: Light-Entity für Textfarbe (z.B. light.text_color).
+      selector:
+        entity:
+          domain: light
+
+    rotation_interval:
+      name: Wechselintervall (Sekunden)
+      description: Wie schnell soll der Text wechseln?
+      default: 5
+      selector:
+        number:
+          min: 2
+          max: 180
+          mode: slider
+          unit_of_measurement: Sekunden
+
+    entries:
+      name: Anzuzeigende Einträge
+      description: Definiere die Rotation. Jeder Eintrag kann eigenen Text, Wertebereiche und Farben haben.
+      selector:
+        object:
+
+      default:
+        []
+      # Beispiel wie Einträge aufgebaut sind:
+      # - entity: sensor.xyz
+      #   text: "PV {{ value }}W"
+      #   low_value: 500
+      #   high_value: 2500
+      #   low_color: [255, 0, 0]
+      #   high_color: [0, 255, 0]
+
+mode: single
+
+variables:
+  display: !input display_entity
+  color_light: !input color_entity
+  interval: !input rotation_interval
+  entries: !input entries
+
+  # Interne Rotationslogik speichern im Kontext (ohne Helper)
+  last_index: >
+    {% set last = this.attributes.get('last_index', -1) %}
+    {{ (last | int) }}
+
+  next_index: >
+    {% set count = entries | count %}
+    {% if count == 0 %}
+      0
+    {% else %}
+      {{ (last_index + 1) % count }}
+    {% endif %}
+
+  current_entry: >
+    {{ entries[next_index] }}
+
+  entity_id: >
+    {{ current_entry.entity }}
+
+  raw_value: >
+    {{ states(entity_id) }}
+
+  numeric_value: >
+    {{ raw_value | float(0) }}
+
+  formatted_text: >
+    {{ current_entry.text | replace("{{ value }}", numeric_value | round(0) | string ) }}
+
+  # --- Farbinterpolation ---
+  low_value: "{{ current_entry.low_value | float }}"
+  high_value: "{{ current_entry.high_value | float }}"
+
+  low_color: "{{ current_entry.low_color }}"
+  high_color: "{{ current_entry.high_color }}"
+
+  # Verhältnis berechnen 0.0–1.0
+  ratio: >
+    {% if numeric_value <= low_value %}
+      0
+    {% elif numeric_value >= high_value %}
+      1
+    {% else %}
+      {{ (numeric_value - low_value) / (high_value - low_value) }}
+    {% endif %}
+
+  # Interpolierte RGB-Komponenten
+  r: >
+    {{ (low_color[0] + (high_color[0] - low_color[0]) * ratio) | int }}
+  g: >
+    {{ (low_color[1] + (high_color[1] - low_color[1]) * ratio) | int }}
+  b: >
+    {{ (low_color[2] + (high_color[2] - low_color[2]) * ratio) | int }}
+
+trigger:
+  - platform: time_pattern
+    seconds: "/{{ interval }}"
+
+action:
+  # Neuen Index sichern
+  - service: automation.modify
+    data:
+      entity_id: "{{ this.entity_id }}"
+      variables:
+        last_index: "{{ next_index }}"
+
+  # Whitespace NUR beim echten Wechsel
+  - service: text.set_value
+    target:
+      entity_id: "{{ display }}"
+    data:
+      value: " "
+
+  # Farbe setzen
+  - service: light.turn_on
+    target:
+      entity_id: "{{ color_light }}"
+    data:
+      rgb_color: ["{{ r }}","{{ g }}","{{ b }}"]
+
+  # Text setzen
+  - service: text.set_value
+    target:
+      entity_id: "{{ display }}"
+    data:
+      value: "{{ formatted_text }}"
