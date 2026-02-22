@@ -1,48 +1,39 @@
 blueprint:
-  name: iPixel – Rotierende Mehrfachanzeige (mit Farbverlauf)
+  name: iPixel – Rotierende Mehrfachanzeige (Dauerlauf)
   description: >
     Zeigt mehrere Sensorwerte nacheinander auf einem iPixel Display an.
-    Jede Anzeige besteht aus:
-    - Einer Sensor-Entität (z. B. PV, SoC, Temperatur …)
-    - Einem Textformat (z. B. "PV {{ value }}W")
-    - Einem unteren & oberen Wert (Bereich, zwischen dem die Farbe verläuft)
-    - Einer unteren & oberen RGB-Farbe (Color Selector)
-    Zwischen niedriger und hoher Farbe wird automatisch interpoliert.
-    Der Wechsel erfolgt nach einstellbarem Intervall (2–180 Sekunden).
+    Jeder Eintrag besitzt:
+    - Sensor-Entity (z. B. PV, SoC, Temperatur …)
+    - Textformat (z. B. "PV {{ value }}W")
+    - Unteren & oberen Wert zur Farbberechnung
+    - Untere & obere Farbe (RGB Color Selector)
+
+    Zwischen low_color und high_color wird automatisch interpoliert.
+    Das Display wechselt die Anzeige im eingestellten Intervall (2–180 Sekunden).
+
     Der Whitespace-Trick verhindert sichtbare Farbwechsel vor dem Textwechsel.
 
-    Unter „Anzuzeigende Einträge“ kannst du eine Liste anlegen:
-    Beispiel:
-      - entity: sensor.meine_entitaet1
-        text: "PV {{ value }}W"
-        low_value: 500
-        high_value: 2500
-        low_color: [255, 0, 0]
-        high_color: [0, 255, 0]
-
-    Die Reihenfolge der Einträge entspricht der späteren Anzeige-Reihenfolge.
-    Das Display switcht also von Eintrag 1 → 2 → 3 … und wieder zurück zu 1.
+    Die Reihenfolge der Einträge bestimmt die Reihenfolge der Anzeige.
 
   domain: automation
-
   input:
     display_entity:
       name: Display Text-Entity
-      description: Text-Entity des iPixel Displays (z. B. text.display)
+      description: Text-Entity des iPixel Displays
       selector:
         entity:
           domain: text
 
     color_entity:
-      name: Farb-Entity (light)
-      description: Light-Entity, die die Textfarbe steuert (z. B. light.text_color)
+      name: Farb-Entity
+      description: Light-Entity für Textfarbe
       selector:
         entity:
           domain: light
 
     rotation_interval:
       name: Wechselintervall (Sekunden)
-      description: Wie schnell soll zwischen den Anzeigen gewechselt werden?
+      description: Wie schnell soll die Anzeige rotieren?
       default: 5
       selector:
         number:
@@ -54,14 +45,22 @@ blueprint:
     entries:
       name: Anzuzeigende Einträge
       description: >
-        Liste der Anzeigen, die nacheinander dargestellt werden.
-        Jeder Eintrag definiert:
-        - entity: Sensor-Entität
-        - text: Format des anzuzeigenden Textes ({{ value }} wird ersetzt)
-        - low_value: Unterer Wert (Beginn Farbverlauf)
-        - high_value: Oberer Wert (Ende Farbverlauf)
-        - low_color: RGB-Farbe unten
-        - high_color: RGB-Farbe oben
+        Liste der Werte, die nacheinander angezeigt werden.
+        Beispiel:
+          - entity: sensor.meine_entitaet1
+            text: "PV {{ value }}W"
+            low_value: 500
+            high_value: 2500
+            low_color: [255, 0, 0]
+            high_color: [0, 255, 0]
+
+          - entity: sensor.meine_entitaet2
+            text: "SoC {{ value }}%"
+            low_value: 10
+            high_value: 80
+            low_color: [255, 0, 0]
+            high_color: [0, 255, 0]
+
       default:
         - entity: sensor.meine_entitaet1
           text: "Entität 1: {{ value }}"
@@ -83,10 +82,11 @@ blueprint:
           high_value: 2500
           low_color: [255, 0, 0]
           high_color: [0, 255, 0]
+
       selector:
         object:
 
-mode: single
+mode: restart
 
 variables:
   display: !input display_entity
@@ -94,89 +94,71 @@ variables:
   interval: !input rotation_interval
   entries: !input entries
 
-  # Rotation merken
-  last_index: >
-    {% set last = this.attributes.get('last_index', -1) %}
-    {{ last | int }}
+  total: "{{ entries | count }}"
 
-  next_index: >
-    {% set count = entries | count %}
-    {% if count == 0 %}
-      0
-    {% else %}
-      {{ (last_index + 1) % count }}
-    {% endif %}
+sequence:
+  - repeat:
+      while: "{{ true }}"
+      sequence:
 
-  current_entry: >
-    {{ entries[next_index] }}
+        # Welcher Eintrag kommt jetzt?
+        - variables:
+            index: >
+              {% set last = this.attributes.get('last_index', -1) | int %}
+              {{ (last + 1) % total }}
 
-  entity_id: >
-    {{ current_entry.entity }}
+            current: "{{ entries[index] }}"
 
-  raw_value: >
-    {{ states(entity_id) }}
+            sensor_value: "{{ states(current.entity) | float(0) }}"
 
-  numeric_value: >
-    {{ raw_value | float(0) }}
+            # Farbberechnung
+            ratio: >
+              {% if sensor_value <= current.low_value %}
+                0
+              {% elif sensor_value >= current.high_value %}
+                1
+              {% else %}
+                {{ (sensor_value - current.low_value) / (current.high_value - current.low_value) }}
+              {% endif %}
 
-  # Text
-  formatted_text: >
-    {{ current_entry.text | replace("{{ value }}", numeric_value | round(0) | string ) }}
+            r: >
+              {{ (current.low_color[0] + (current.high_color[0] - current.low_color[0]) * ratio) | int }}
+            g: >
+              {{ (current.low_color[1] + (current.high_color[1] - current.low_color[1]) * ratio) | int }}
+            b: >
+              {{ (current.low_color[2] + (current.high_color[2] - current.low_color[2]) * ratio) | int }}
 
-  # Bereich & Farben
-  low_value: "{{ current_entry.low_value | float }}"
-  high_value: "{{ current_entry.high_value | float }}"
+            formatted_text: >
+              {{ current.text | replace("{{ value }}", sensor_value | round(0) | string ) }}
 
-  low_color: "{{ current_entry.low_color }}"
-  high_color: "{{ current_entry.high_color }}"
+        # Index sichern
+        - service: automation.modify
+          data:
+            entity_id: "{{ this.entity_id }}"
+            variables:
+              last_index: "{{ index }}"
 
-  # Verhältnis 0–1
-  ratio: >
-    {% if numeric_value <= low_value %}
-      0
-    {% elif numeric_value >= high_value %}
-      1
-    {% else %}
-      {{ (numeric_value - low_value) / (high_value - low_value) }}
-    {% endif %}
+        # Whitespace setzen (verhindert Farbburst)
+        - service: text.set_value
+          target:
+            entity_id: "{{ display }}"
+          data:
+            value: " "
 
-  # Interpolierte RGB-Farbe
-  r: >
-    {{ (low_color[0] + (high_color[0] - low_color[0]) * ratio) | int }}
-  g: >
-    {{ (low_color[1] + (high_color[1] - low_color[1]) * ratio) | int }}
-  b: >
-    {{ (low_color[2] + (high_color[2] - low_color[2]) * ratio) | int }}
+        # Farbe setzen
+        - service: light.turn_on
+          target:
+            entity_id: "{{ color_light }}"
+          data:
+            rgb_color: ["{{ r }}", "{{ g }}", "{{ b }}"]
 
-trigger:
-  - platform: time_pattern
-    seconds: "/{{ interval }}"
+        # Text setzen
+        - service: text.set_value
+          target:
+            entity_id: "{{ display }}"
+          data:
+            value: "{{ formatted_text }}"
 
-action:
-  # neuen Index speichern
-  - service: automation.modify
-    data:
-      entity_id: "{{ this.entity_id }}"
-      variables:
-        last_index: "{{ next_index }}"
-
-  # Whitespace (nur beim Wechsel)
-  - service: text.set_value
-    target:
-      entity_id: "{{ display }}"
-    data:
-      value: " "
-
-  # Farbe anwenden
-  - service: light.turn_on
-    target:
-      entity_id: "{{ color_light }}"
-    data:
-      rgb_color: ["{{ r }}","{{ g }}","{{ b }}"]
-
-  # Text setzen
-  - service: text.set_value
-    target:
-      entity_id: "{{ display }}"
-    data:
-      value: "{{ formatted_text }}"
+        # Warten bis zum nächsten Wechsel
+        - delay:
+            seconds: "{{ interval }}"
