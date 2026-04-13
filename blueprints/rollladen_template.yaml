@@ -1,10 +1,10 @@
 blueprint:
   name: "Rollladen: Fenster-/Regen-/Kälte-/Sonnenaufgang-Logik (komplett)"
   description: >
-    Vereint Taster (hoch/rille/runter) + Fensterschutz + Regenschutz + Kälteschutz
-    + 1h vor Sonnenaufgang auf Rille (optional, z.B. zum Lüften im Urlaub).
-    Nutzt zwei Input-Booleans als Merker (Öffnen angefordert / Schließen vorgemerkt)
-    und setzt diese ereignisbasiert automatisch zurück.
+    Vereint Taster (Hoch/Rille/Runter) + Fensterschutz + Regenschutz + Kälteschutz
+    + Rille vor Sonnenaufgang (mit einstellbarem Offset).
+    Nutzt 2 Input-Booleans als Merker (Öffnen angefordert / Schließen vorgemerkt)
+    und setzt den "Schließen vorgemerkt"-Merker automatisch zurück, sobald er nicht mehr gebraucht wird.
   domain: automation
   author: "Copilot"
   homeassistant:
@@ -12,14 +12,16 @@ blueprint:
 
   input:
     cover_entity:
-      name: Rollladen (Cover)
+      name: "Rollladen (Cover)"
+      description: "Der zu steuernde Rollladen."
       selector:
         entity:
           filter:
             - domain: cover
 
     window_sensor:
-      name: Fenster (Binary Sensor / Gruppe)
+      name: "Fenster-Sensor (Binary Sensor / Gruppe)"
+      description: "Fensterzustand: on = offen, off = geschlossen."
       selector:
         entity:
           filter:
@@ -27,19 +29,21 @@ blueprint:
 
     # --- Taster ---
     button_up:
-      name: Taste "Hoch" (Input Button)
+      name: "Taste: Hoch (Input Button)"
       selector:
         entity:
           filter:
             - domain: input_button
+
     button_rille:
-      name: Taste "Rille" (Input Button)
+      name: "Taste: Rille (Input Button)"
       selector:
         entity:
           filter:
             - domain: input_button
+
     button_down:
-      name: Taste "Runter" (Input Button)
+      name: "Taste: Runter (Input Button)"
       selector:
         entity:
           filter:
@@ -47,24 +51,24 @@ blueprint:
 
     # --- Helfer / Merker ---
     helper_pending_close:
-      name: Helfer "Schließen vorgemerkt" (Input Boolean)
-      description: Merkt Runter-Wunsch bei offenem Fenster.
+      name: "Helfer: Schließen vorgemerkt (Input Boolean)"
+      description: "Merker für Runter-Wunsch, wenn das Fenster offen war."
       selector:
         entity:
           filter:
             - domain: input_boolean
 
     helper_open_override:
-      name: Helfer "Öffnen angefordert" (Input Boolean)
-      description: Blockiert Auto-Schließen nach Fenster-Schließen, wenn bewusst geöffnet wurde.
+      name: "Helfer: Öffnen angefordert (Input Boolean)"
+      description: "Override: Wenn ON, verhindert Auto-Schließen nach Fensterschließen."
       selector:
         entity:
           filter:
             - domain: input_boolean
 
-    # --- Rille ---
+    # --- Positionen / Schwellen ---
     rille_position:
-      name: Rille-Position (%)
+      name: "Rille-Position (%)"
       default: 16
       selector:
         number:
@@ -73,38 +77,55 @@ blueprint:
           step: 1
           mode: slider
 
+    bottom_threshold:
+      name: "Unten-Schwelle (%)"
+      description: "Gilt der Rollladen als 'unten', wenn current_position <= Schwelle."
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          mode: slider
+
     # --- Sonnenaufgang-Rille (allgemeiner Helper) ---
     sunrise_rille_enable:
-      name: Helper "Sonnenaufgang Rille aktiv" (Input Boolean)
-      description: Allgemeiner Schalter, um die Sonnenaufgang-Rille-Logik zu aktivieren.
+      name: "Helper: Sonnenaufgang Rille aktiv (Input Boolean)"
+      description: "Allgemeiner Schalter, um die Sonnenaufgang-Rille-Logik zu aktivieren."
       selector:
         entity:
           filter:
             - domain: input_boolean
 
     sunrise_offset:
-      name: Offset vor Sonnenaufgang
-      description: "Format HH:MM:SS, z.B. -01:00:00 = 1 Stunde vor Sonnenaufgang"
+      name: "Sonnenaufgang: Offset (HH:MM:SS)"
+      description: "Beispiel: -01:00:00 = 1 Stunde vor Sonnenaufgang."
       default: "-01:00:00"
       selector:
         text:
 
     sunrise_requires_window_open:
-      name: Sonnenaufgang-Rille nur wenn Fenster offen?
+      name: "Sonnenaufgang-Rille nur wenn Fenster offen?"
       default: true
       selector:
         boolean:
 
     # --- Kälteschutz ---
+    enable_cold_protection:
+      name: "Kälteschutz aktivieren?"
+      default: true
+      selector:
+        boolean:
+
     temp_sensor:
-      name: Temperatursensor (optional, für Kälteschutz)
+      name: "Temperatursensor (für Kälteschutz)"
       selector:
         entity:
           filter:
             - domain: sensor
 
     temp_below:
-      name: Kälteschutz: Schwelle (unter °C)
+      name: "Kälteschutz: Schwelle (unter °C)"
       default: 17
       selector:
         number:
@@ -114,30 +135,36 @@ blueprint:
           mode: slider
 
     temp_for:
-      name: Kälteschutz: Dauer unter Schwelle
+      name: "Kälteschutz: Dauer unter Schwelle"
       default:
         minutes: 5
       selector:
         duration:
 
     # --- Regenschutz ---
+    enable_rain_protection:
+      name: "Regenschutz aktivieren?"
+      default: true
+      selector:
+        boolean:
+
     rain_sensor:
-      name: Regensensor (Binary Sensor)
+      name: "Regensensor (Binary Sensor)"
       selector:
         entity:
           filter:
             - domain: binary_sensor
 
     rain_enable:
-      name: Regenüberwachung aktiv (Input Boolean)
-      description: Muss ON sein, damit Regenschutz greift.
+      name: "Helper: Regenüberwachung aktiv (Input Boolean)"
+      description: "Muss ON sein, damit der Regenschutz greift."
       selector:
         entity:
           filter:
             - domain: input_boolean
 
     rain_for:
-      name: Regensensor muss wie lange an sein?
+      name: "Regensensor: Muss wie lange ON sein?"
       default:
         seconds: 5
       selector:
@@ -149,23 +176,22 @@ variables:
   cover_entity: !input cover_entity
   window_sensor: !input window_sensor
 
-  button_up: !input button_up
-  button_rille: !input button_rille
-  button_down: !input button_down
-
   helper_pending_close: !input helper_pending_close
   helper_open_override: !input helper_open_override
 
   rille_position: !input rille_position
+  bottom_threshold: !input bottom_threshold
 
   sunrise_rille_enable: !input sunrise_rille_enable
   sunrise_offset: !input sunrise_offset
   sunrise_requires_window_open: !input sunrise_requires_window_open
 
+  enable_cold_protection: !input enable_cold_protection
   temp_sensor: !input temp_sensor
   temp_below: !input temp_below
   temp_for: !input temp_for
 
+  enable_rain_protection: !input enable_rain_protection
   rain_sensor: !input rain_sensor
   rain_enable: !input rain_enable
   rain_for: !input rain_for
@@ -174,58 +200,58 @@ trigger:
   # --- Taster ---
   - platform: state
     entity_id: !input button_up
-    id: btn_up
+    id: "btn_up"
 
   - platform: state
     entity_id: !input button_rille
-    id: btn_rille
+    id: "btn_rille"
 
   - platform: state
     entity_id: !input button_down
-    id: btn_down
+    id: "btn_down"
 
   # --- Fenster ---
   - platform: state
     entity_id: !input window_sensor
     to: "on"
-    id: window_open
+    id: "window_open"
 
   - platform: state
     entity_id: !input window_sensor
     to: "off"
-    id: window_closed
+    id: "window_closed"
 
   # --- Kälte ---
   - platform: numeric_state
     entity_id: !input temp_sensor
     below: !input temp_below
     for: !input temp_for
-    id: temp_cold
+    id: "temp_cold"
 
   # --- Regen ---
   - platform: state
     entity_id: !input rain_sensor
     to: "on"
     for: !input rain_for
-    id: rain_on
+    id: "rain_on"
 
-  # --- 1h vor Sonnenaufgang (offset als Input) ---
+  # --- Sonnenaufgang mit Offset ---
   - platform: sun
     event: sunrise
     offset: !input sunrise_offset
-    id: sunrise_offset_trigger
+    id: "sunrise_offset_trigger"
 
 action:
   - choose:
 
       ######################################################################
       # 0) SONNENAUFGANG (Offset) -> RILLE
-      #    Wenn enabled + Rollladen nicht geschlossen
+      #    Enabled + Rollladen nicht geschlossen
       #    Optional: nur wenn Fenster offen (Lüften)
       ######################################################################
       - conditions:
           - condition: trigger
-            id: sunrise_offset_trigger
+            id: "sunrise_offset_trigger"
           - condition: state
             entity_id: !input sunrise_rille_enable
             state: "on"
@@ -253,13 +279,15 @@ action:
               position: !input rille_position
 
       ######################################################################
-      # 1) REGENSCHUTZ:
-      #    Regen an + Fenster offen + Regenüberwachung an -> schließen
-      #    (setzt beide Merker zurück)
+      # 1) REGENSCHUTZ
+      #    Regen ON + Fenster offen + Regenüberwachung ON -> schließen
       ######################################################################
       - conditions:
           - condition: trigger
-            id: rain_on
+            id: "rain_on"
+          - condition: template
+            value_template: >
+              {{ enable_rain_protection }}
           - condition: state
             entity_id: !input window_sensor
             state: "on"
@@ -277,13 +305,15 @@ action:
               entity_id: !input cover_entity
 
       ######################################################################
-      # 2) KÄLTESCHUTZ:
-      #    < Schwelle (for) + Fenster offen -> schließen
-      #    (setzt beide Merker zurück)
+      # 2) KÄLTESCHUTZ
+      #    Temp < Schwelle (for) + Fenster offen -> schließen
       ######################################################################
       - conditions:
           - condition: trigger
-            id: temp_cold
+            id: "temp_cold"
+          - condition: template
+            value_template: >
+              {{ enable_cold_protection }}
           - condition: state
             entity_id: !input window_sensor
             state: "on"
@@ -302,7 +332,7 @@ action:
       ######################################################################
       - conditions:
           - condition: trigger
-            id: btn_up
+            id: "btn_up"
         sequence:
           - service: input_boolean.turn_on
             target:
@@ -319,7 +349,7 @@ action:
       ######################################################################
       - conditions:
           - condition: trigger
-            id: btn_rille
+            id: "btn_rille"
         sequence:
           - service: input_boolean.turn_on
             target:
@@ -334,14 +364,14 @@ action:
               position: !input rille_position
 
       ######################################################################
-      # 5) TASTE RUNTER:
+      # 5) TASTE RUNTER
       #    - Fenster offen -> pending_close ON (nicht fahren)
       #    - Fenster zu -> schließen + pending_close OFF
-      #    - override wird dabei OFF gesetzt (man will ja schließen)
+      #    - override OFF (man will ja schließen)
       ######################################################################
       - conditions:
           - condition: trigger
-            id: btn_down
+            id: "btn_down"
         sequence:
           - service: input_boolean.turn_off
             target:
@@ -368,12 +398,12 @@ action:
                       entity_id: !input helper_pending_close
 
       ######################################################################
-      # 6) FENSTER AUF:
-      #    Wenn Rollladen unten (<=5% oder closed) -> hochfahren + pending_close ON
+      # 6) FENSTER AUF
+      #    Wenn Rollladen unten (<= bottom_threshold oder closed) -> hoch + pending_close ON
       ######################################################################
       - conditions:
           - condition: trigger
-            id: window_open
+            id: "window_open"
         sequence:
           - condition: template
             value_template: >
@@ -381,7 +411,7 @@ action:
               {% if pos is none %}
                 {{ is_state(cover_entity, 'closed') }}
               {% else %}
-                {{ pos|int <= 5 }}
+                {{ pos|int <= bottom_threshold|int }}
               {% endif %}
           - service: cover.open_cover
             target:
@@ -391,14 +421,13 @@ action:
               entity_id: !input helper_pending_close
 
       ######################################################################
-      # 7) FENSTER ZU:
+      # 7) FENSTER ZU
       #    - pending_close ON & override OFF -> schließen + pending_close OFF
       #    - pending_close ON & override ON -> pending_close OFF (nicht schließen)
-      #    (zusätzlich: pending_close wird immer OFF, damit nichts "hängen" bleibt)
       ######################################################################
       - conditions:
           - condition: trigger
-            id: window_closed
+            id: "window_closed"
         sequence:
           - choose:
               - conditions:
@@ -434,3 +463,4 @@ action:
               entity_id: !input helper_pending_close
 
     default: []
+``
