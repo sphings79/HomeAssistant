@@ -1,0 +1,504 @@
+blueprint:
+  name: "Rollladen: Fenster-/Regen-/Kälte-/Sonnenaufgang-Logik (komplett)"
+  description: >
+    Vereint Taster (Hoch/Rille/Runter) + Fensterschutz + Regenschutz + Kälteschutz
+    + Rille vor Sonnenaufgang (Offset einstellbar).
+    Nutzt 2 Input-Booleans als Merker (Öffnen angefordert / Schließen vorgemerkt).
+    Optional: automatische Rücksetzung beider Merker nach einstellbarer Zeit.
+  domain: automation
+  author: "Copilot"
+  homeassistant:
+    min_version: "2026.4.0"
+
+  input:
+    cover_entity:
+      name: "Rollladen (Cover)"
+      description: "Der zu steuernde Rollladen."
+      selector:
+        entity:
+          filter:
+            - domain: cover
+
+    window_sensor:
+      name: "Fenster-Sensor (Binary Sensor / Gruppe)"
+      description: "Fensterzustand: on = offen, off = geschlossen."
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+
+    button_up:
+      name: "Taste: Hoch (Input Button)"
+      selector:
+        entity:
+          filter:
+            - domain: input_button
+
+    button_rille:
+      name: "Taste: Rille (Input Button)"
+      selector:
+        entity:
+          filter:
+            - domain: input_button
+
+    button_down:
+      name: "Taste: Runter (Input Button)"
+      selector:
+        entity:
+          filter:
+            - domain: input_button
+
+    helper_pending_close:
+      name: "Helfer: Rolladen Schlafzimmer Schliessen vorgemerkt"
+      description: "Merker für Runter-Wunsch, wenn das Fenster offen ist."
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+
+    helper_open_override:
+      name: "Helfer: Rolladen Schlafzimmer Oeffnen angefordert"
+      description: "Override: Wenn ON, verhindert Auto-Schließen nach Fensterschließen."
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+
+    rille_position:
+      name: "Rille-Position (%)"
+      default: 16
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          mode: slider
+
+    bottom_threshold:
+      name: "Unten-Schwelle (%)"
+      description: "Gilt der Rollladen als 'unten', wenn current_position <= Schwelle."
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          mode: slider
+
+    sunrise_rille_enable:
+      name: "Helper: Sonnenaufgang Rille aktiv (allgemein)"
+      description: "Wenn ON, darf die Sonnenaufgang-Rille-Logik laufen."
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+
+    sunrise_offset:
+      name: "Sonnenaufgang: Offset (HH:MM:SS)"
+      description: "Beispiel: -01:00:00 = 1 Stunde vor Sonnenaufgang."
+      default: "-01:00:00"
+      selector:
+        text:
+
+    sunrise_requires_window_open:
+      name: "Sonnenaufgang-Rille nur wenn Fenster offen?"
+      default: true
+      selector:
+        boolean:
+
+    enable_cold_protection:
+      name: "Kälteschutz aktivieren?"
+      default: true
+      selector:
+        boolean:
+
+    temp_sensor:
+      name: "Temperatursensor (für Kälteschutz)"
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+
+    temp_below:
+      name: "Kälteschutz: Schwelle (unter °C)"
+      default: 17
+      selector:
+        number:
+          min: -20
+          max: 40
+          step: 0.5
+          mode: slider
+
+    temp_for:
+      name: "Kälteschutz: Dauer unter Schwelle"
+      default:
+        minutes: 5
+      selector:
+        duration:
+
+    enable_rain_protection:
+      name: "Regenschutz aktivieren?"
+      default: true
+      selector:
+        boolean:
+
+    rain_sensor:
+      name: "Regensensor (Binary Sensor)"
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+
+    rain_enable:
+      name: "Helper: Regenüberwachung aktiv (Input Boolean)"
+      description: "Muss ON sein, damit der Regenschutz greift."
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+
+    rain_for:
+      name: "Regensensor: Muss wie lange ON sein?"
+      default:
+        seconds: 5
+      selector:
+        duration:
+
+    auto_reset_helpers:
+      name: "Helper automatisch zurücksetzen?"
+      description: "Wenn ON: 'Öffnen angefordert' und 'Schliessen vorgemerkt' werden nach Zeit automatisch ausgemacht."
+      default: true
+      selector:
+        boolean:
+
+    reset_open_override_after:
+      name: "Auto-Reset: Öffnen angefordert nach"
+      default:
+        hours: 2
+      selector:
+        duration:
+
+    reset_pending_close_after:
+      name: "Auto-Reset: Schliessen vorgemerkt nach"
+      default:
+        hours: 12
+      selector:
+        duration:
+
+mode: queued
+# GEÄNDERT: restart -> queued, damit schnelle Tastendrücke (z.B. Hoch -> Rille)
+# nicht die laufende Cover-Aktion abbrechen, bevor der Rollladen reagiert hat.
+
+variables:
+  cover_entity: !input cover_entity
+  window_sensor: !input window_sensor
+  helper_pending_close: !input helper_pending_close
+  helper_open_override: !input helper_open_override
+  rille_position: !input rille_position
+  bottom_threshold: !input bottom_threshold
+  sunrise_requires_window_open: !input sunrise_requires_window_open
+  enable_cold_protection: !input enable_cold_protection
+  enable_rain_protection: !input enable_rain_protection
+  auto_reset_helpers: !input auto_reset_helpers
+
+trigger:
+  - platform: state
+    entity_id: !input button_up
+    id: "btn_up"
+
+  - platform: state
+    entity_id: !input button_rille
+    id: "btn_rille"
+
+  - platform: state
+    entity_id: !input button_down
+    id: "btn_down"
+
+  - platform: state
+    entity_id: !input window_sensor
+    to: "on"
+    id: "window_open"
+
+  - platform: state
+    entity_id: !input window_sensor
+    to: "off"
+    id: "window_closed"
+
+  - platform: numeric_state
+    entity_id: !input temp_sensor
+    below: !input temp_below
+    for: !input temp_for
+    id: "temp_cold"
+
+  - platform: state
+    entity_id: !input rain_sensor
+    to: "on"
+    for: !input rain_for
+    id: "rain_on"
+
+  - platform: sun
+    event: sunrise
+    offset: !input sunrise_offset
+    id: "sunrise_offset_trigger"
+
+  - platform: state
+    entity_id: !input helper_open_override
+    to: "on"
+    for: !input reset_open_override_after
+    id: "reset_open_override"
+
+  - platform: state
+    entity_id: !input helper_pending_close
+    to: "on"
+    for: !input reset_pending_close_after
+    id: "reset_pending_close"
+
+action:
+  - choose:
+
+      ######################################################################
+      # A) AUTO-RESET (nur wenn aktiviert)
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "reset_open_override"
+          - condition: template
+            value_template: "{{ auto_reset_helpers }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_open_override
+
+      - conditions:
+          - condition: trigger
+            id: "reset_pending_close"
+          - condition: template
+            value_template: "{{ auto_reset_helpers }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_pending_close
+
+      ######################################################################
+      # 0) SONNENAUFGANG (Offset) -> RILLE
+      # FIX: Bedingung war invertiert — Rille soll auch (und gerade dann)
+      # gesetzt werden, wenn der Rollladen geschlossen ist.
+      # Alte Bedingung: not is_state(cover_entity, 'closed')  <- verhinderte
+      #                 die Aktion wenn Rollladen unten war (Normalfall nachts)
+      # Neue Bedingung: entfernt — der Rollladen wird in jedem Zustand auf
+      #                 Rille gefahren, sofern die anderen Bedingungen greifen.
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "sunrise_offset_trigger"
+          - condition: state
+            entity_id: !input sunrise_rille_enable
+            state: "on"
+          - condition: template
+            value_template: >
+              {% if sunrise_requires_window_open %}
+                {{ is_state(window_sensor, 'on') }}
+              {% else %}
+                true
+              {% endif %}
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input helper_open_override
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_pending_close
+          - service: cover.set_cover_position
+            target:
+              entity_id: !input cover_entity
+            data:
+              position: !input rille_position
+
+      ######################################################################
+      # 1) REGENSCHUTZ
+      # FIX: Zusätzliche Prüfung ob Cover nicht schon geschlossen ist,
+      # um unnötige Service-Calls zu vermeiden.
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "rain_on"
+          - condition: template
+            value_template: "{{ enable_rain_protection }}"
+          - condition: state
+            entity_id: !input window_sensor
+            state: "on"
+          - condition: state
+            entity_id: !input rain_enable
+            state: "on"
+          - condition: template
+            value_template: "{{ not is_state(cover_entity, 'closed') }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id:
+                - !input helper_pending_close
+                - !input helper_open_override
+          - service: cover.close_cover
+            target:
+              entity_id: !input cover_entity
+
+      ######################################################################
+      # 2) KÄLTESCHUTZ
+      # FIX: Zusätzliche Prüfung ob Cover nicht schon geschlossen ist,
+      # um unnötige Service-Calls zu vermeiden.
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "temp_cold"
+          - condition: template
+            value_template: "{{ enable_cold_protection }}"
+          - condition: state
+            entity_id: !input window_sensor
+            state: "on"
+          - condition: template
+            value_template: "{{ not is_state(cover_entity, 'closed') }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id:
+                - !input helper_pending_close
+                - !input helper_open_override
+          - service: cover.close_cover
+            target:
+              entity_id: !input cover_entity
+
+      ######################################################################
+      # 3) TASTE HOCH
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "btn_up"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input helper_open_override
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_pending_close
+          - service: cover.open_cover
+            target:
+              entity_id: !input cover_entity
+
+      ######################################################################
+      # 4) TASTE RILLE
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "btn_rille"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input helper_open_override
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_pending_close
+          - service: cover.set_cover_position
+            target:
+              entity_id: !input cover_entity
+            data:
+              position: !input rille_position
+
+      ######################################################################
+      # 5) TASTE RUNTER
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "btn_down"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input helper_open_override
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input window_sensor
+                    state: "on"
+                sequence:
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: !input helper_pending_close
+              - conditions:
+                  - condition: state
+                    entity_id: !input window_sensor
+                    state: "off"
+                sequence:
+                  - service: cover.close_cover
+                    target:
+                      entity_id: !input cover_entity
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input helper_pending_close
+
+      ######################################################################
+      # 6) FENSTER AUF -> hoch, wenn Rollladen "unten"
+      # HINWEIS: Wenn die Template-Bedingung (Position <= Schwelle) nicht
+      # zutrifft, wird die Sequence still abgebrochen. helper_pending_close
+      # wird in diesem Fall NICHT gesetzt — der Rollladen ist nicht unten,
+      # also gibt es nichts zu merken. Dieses Verhalten ist gewollt.
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "window_open"
+        sequence:
+          - condition: template
+            value_template: >
+              {% set pos = state_attr(cover_entity, 'current_position') %}
+              {% if pos is none %}
+                {{ is_state(cover_entity, 'closed') }}
+              {% else %}
+                {{ pos|int <= bottom_threshold|int }}
+              {% endif %}
+          - service: cover.open_cover
+            target:
+              entity_id: !input cover_entity
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input helper_pending_close
+
+      ######################################################################
+      # 7) FENSTER ZU -> ggf. wieder runter
+      # FIX: Das unbedingtes turn_off für helper_pending_close nach dem
+      # choose-Block wurde entfernt. Es überschrieb beide Zweige und machte
+      # den Override-Zweig wirkungslos (Merker wurde immer gelöscht).
+      ######################################################################
+      - conditions:
+          - condition: trigger
+            id: "window_closed"
+        sequence:
+          - choose:
+              # Fenster zu + Schließen vorgemerkt + kein Override -> runter fahren
+              - conditions:
+                  - condition: state
+                    entity_id: !input helper_pending_close
+                    state: "on"
+                  - condition: state
+                    entity_id: !input helper_open_override
+                    state: "off"
+                sequence:
+                  - service: cover.close_cover
+                    target:
+                      entity_id: !input cover_entity
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input helper_pending_close
+
+              # Fenster zu + Schließen vorgemerkt + Override aktiv -> nur Merker löschen
+              - conditions:
+                  - condition: state
+                    entity_id: !input helper_pending_close
+                    state: "on"
+                  - condition: state
+                    entity_id: !input helper_open_override
+                    state: "on"
+                sequence:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input helper_pending_close
+              # Kein Zweig trifft zu (helper_pending_close = off): nichts tun.
+
+    default: []
