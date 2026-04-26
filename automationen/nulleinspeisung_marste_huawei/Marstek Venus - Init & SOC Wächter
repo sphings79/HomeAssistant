@@ -1,0 +1,93 @@
+alias: Marstek Venus - Init & SOC Wächter
+description: >
+  HA-Start: Marstek in manuellen Modus + Entladeleistung 0. SOC <= 12%: Entladen
+  sperren (Boolean OFF, sofort Standby). SOC >= 15%: Entladen wieder freigeben
+  (Boolean ON). Wenn SOC beim Start unavailable ist, wird ON gesetzt
+  (fail-safe).
+triggers:
+  - event: start
+    id: ha_start
+    trigger: homeassistant
+  - entity_id: sensor.marstek_venus_modbus_soc_batterie
+    below: 12.1
+    for:
+      seconds: 5
+    id: soc_cutoff
+    trigger: numeric_state
+  - entity_id: sensor.marstek_venus_modbus_soc_batterie
+    above: 14.9
+    id: soc_freigabe
+    trigger: numeric_state
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: ha_start
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ states('sensor.marstek_venus_modbus_soc_batterie') not
+                      in ['unavailable', 'unknown', 'none']
+                         and states('sensor.marstek_venus_modbus_soc_batterie') | float(100) < 15 }}
+                sequence:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.marstek_entladen_erlaubt
+            default:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.marstek_entladen_erlaubt
+          - action: switch.turn_on
+            target:
+              entity_id: switch.marstek_venus_modbus_rs485_steuermodus
+          - delay: "00:00:02"
+          - action: select.select_option
+            target:
+              entity_id: select.marstek_venus_modbus_benutzer_modus
+            data:
+              option: manual
+          - delay: "00:00:01"
+          - action: select.select_option
+            target:
+              entity_id: select.marstek_venus_modbus_erzwungener_modus
+            data:
+              option: discharge
+          - action: number.set_value
+            target:
+              entity_id: number.marstek_venus_modbus_entladeleistung_einstellen
+            data:
+              value: 0
+      - conditions:
+          - condition: trigger
+            id: soc_cutoff
+          - condition: state
+            entity_id: input_boolean.marstek_entladen_erlaubt
+            state: "on"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.marstek_entladen_erlaubt
+          - action: number.set_value
+            target:
+              entity_id: number.marstek_venus_modbus_entladeleistung_einstellen
+            data:
+              value: 0
+          - action: select.select_option
+            target:
+              entity_id: select.marstek_venus_modbus_erzwungener_modus
+            data:
+              option: standby
+      - conditions:
+          - condition: trigger
+            id: soc_freigabe
+          - condition: state
+            entity_id: input_boolean.marstek_entladen_erlaubt
+            state: "off"
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.marstek_entladen_erlaubt
+mode: queued
+max: 2
