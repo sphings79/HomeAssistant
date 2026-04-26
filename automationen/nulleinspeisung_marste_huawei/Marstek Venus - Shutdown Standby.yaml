@@ -1,0 +1,24 @@
+alias: Marstek Venus - Shutdown Standby
+description: >
+  Setzt den Marstek in Standby wenn Home Assistant heruntergefahren oder neu
+  gestartet wird.
+triggers:
+  - event: shutdown
+    trigger: homeassistant
+actions:
+  - action: number.set_value
+    target:
+      entity_id: number.marstek_venus_modbus_entladeleistung_einstellen
+    data:
+      value: 0
+  - action: select.select_option
+    target:
+      entity_id: select.marstek_venus_modbus_erzwungener_modus
+    data:
+      option: standby
+  - action: select.select_option
+    target:
+      entity_id: select.marstek_venus_modbus_benutzer_modus
+    data:
+      option: manual
+mode: single
