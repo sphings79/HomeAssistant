@@ -1,0 +1,14 @@
+alias: Marstek Venus - Modbus RS485 Watchdog
+description: >
+  Schaltet den Modbus RS485 Steuermodus sofort wieder ein, wenn er unerwartet
+  ausgeschaltet wird.
+triggers:
+  - entity_id: switch.marstek_venus_modbus_rs485_steuermodus
+    to: "off"
+    trigger: state
+actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.marstek_venus_modbus_rs485_steuermodus
+mode: single
+max_exceeded: silent
