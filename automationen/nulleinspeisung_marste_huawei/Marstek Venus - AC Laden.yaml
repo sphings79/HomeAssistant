@@ -1,0 +1,156 @@
+alias: Marstek Venus - AC Laden
+description: >
+  AC-Laden mit dynamischer Leistungsregelung und Hysterese. Start bei shelly 
+  -150 W. Stop bei >= -30 W für 5 Sek oder EMMA entlädt. Pfad B: Deadband 10 W,
+  kein sofortiges Reduzieren bei kurzem Shelly-Anstieg. Nur aktiv wenn
+  sensor.gruppe_pv_erzeugung_gesamt > 0.
+triggers:
+  - entity_id: sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power
+    id: adjust
+    trigger: state
+  - entity_id: sensor.emma_akkuaufladung_entladung
+    id: adjust
+    trigger: state
+  - entity_id: switch.marstek_venus_modbus_rs485_steuermodus
+    to: "on"
+    id: adjust
+    trigger: state
+  - entity_id: sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power
+    above: -30
+    for:
+      seconds: 5
+    id: stop_surplus
+    trigger: numeric_state
+  - entity_id: sensor.emma_akkuaufladung_entladung
+    below: -100
+    id: stop_emma
+    trigger: numeric_state
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: adjust
+          - condition: state
+            entity_id: switch.marstek_venus_modbus_rs485_steuermodus
+            state: "on"
+          - condition: numeric_state
+            entity_id: sensor.gruppe_pv_erzeugung_gesamt
+            above: 0
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ not
+                      is_state('select.marstek_venus_modbus_erzwungener_modus',
+                      'charge') }}
+                  - condition: template
+                    value_template: >
+                      {{
+                      states('sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power')
+                      | float(0) < -150 }}
+                sequence:
+                  - action: select.select_option
+                    target:
+                      entity_id: select.marstek_venus_modbus_benutzer_modus
+                    data:
+                      option: manual
+                  - action: select.select_option
+                    target:
+                      entity_id: select.marstek_venus_modbus_erzwungener_modus
+                    data:
+                      option: charge
+                  - delay: "00:00:02"
+                  - action: number.set_value
+                    target:
+                      entity_id: number.marstek_venus_modbus_ladeleistung_einstellen
+                    data:
+                      value: >
+                        {% set shelly  =
+                        states('sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power')
+                        | float(0) | round(0) | int %} {% set emma    =
+                        states('sensor.emma_akkuaufladung_entladung') | float(0)
+                        | round(0) | int %} {% set current =
+                        states('number.marstek_venus_modbus_ladeleistung_einstellen')
+                        | float(0) | round(0) | int %} {% set raw = current -
+                        shelly - 15 + [emma, 0] | min %} {% set clamped = [[raw,
+                        0] | max, 2500] | min | round(0) | int %} {% set
+                        entity_min =
+                        state_attr('number.marstek_venus_modbus_ladeleistung_einstellen',
+                        'min') | int(0) %} {% set entity_max =
+                        state_attr('number.marstek_venus_modbus_ladeleistung_einstellen',
+                        'max') | int(2500) %} {{ [[clamped, entity_min] | max,
+                        entity_max] | min }}
+            default:
+              - condition: state
+                entity_id: select.marstek_venus_modbus_erzwungener_modus
+                state: charge
+              - variables:
+                  shelly: >-
+                    {{
+                    states('sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power')
+                    | float(0) | round(0) | int }}
+                  emma: >-
+                    {{ states('sensor.emma_akkuaufladung_entladung') | float(0)
+                    | round(0) | int }}
+                  current: >-
+                    {{
+                    states('number.marstek_venus_modbus_ladeleistung_einstellen')
+                    | float(0) | round(0) | int }}
+              - variables:
+                  new_power: >
+                    {% set raw = current - shelly - 15 + [emma, 0] | min %} {{
+                    [[raw, 0] | max, 2500] | min }}
+              - condition: template
+                value_template: |
+                  {{ not (new_power < current and shelly >= -30) }}
+              - condition: template
+                value_template: |
+                  {{ (new_power - current) | abs > 10 }}
+              - variables:
+                  entity_min: >
+                    {{
+                    state_attr('number.marstek_venus_modbus_ladeleistung_einstellen',
+                    'min') | int(0) }}
+                  entity_max: >
+                    {{
+                    state_attr('number.marstek_venus_modbus_ladeleistung_einstellen',
+                    'max') | int(2500) }}
+                  safe_power: >
+                    {{ [[new_power, entity_min] | max, entity_max] | min |
+                    round(0) | int }}
+              - action: number.set_value
+                target:
+                  entity_id: number.marstek_venus_modbus_ladeleistung_einstellen
+                data:
+                  value: "{{ safe_power }}"
+      - conditions:
+          - condition: trigger
+            id:
+              - stop_surplus
+              - stop_emma
+          - condition: state
+            entity_id: select.marstek_venus_modbus_erzwungener_modus
+            state: charge
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: number.marstek_venus_modbus_ladeleistung_einstellen
+            data:
+              value: 0
+          - action: number.set_value
+            target:
+              entity_id: number.marstek_venus_modbus_entladeleistung_einstellen
+            data:
+              value: 0
+          - action: select.select_option
+            target:
+              entity_id: select.marstek_venus_modbus_erzwungener_modus
+            data:
+              option: >
+                {{ 'standby' if
+                is_state('input_boolean.marstek_entladen_erlaubt', 'off') else
+                'discharge' }}
+mode: single
+max_exceeded: silent
