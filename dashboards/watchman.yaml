@@ -1,0 +1,146 @@
+views:
+  - type: sections
+    title: Watchman Report
+    icon: mdi:shield-half-full
+    sections:
+      - cards:
+          - type: heading
+            heading: Übersicht
+          - type: markdown
+            content: >
+              {% set ents = state_attr('sensor.watchman_missing_entities',
+              'entities') | default([]) %}
+
+              {% set missing = ents | selectattr('state','eq','missing') | list
+              %}
+
+              {% set unavail = ents | selectattr('state','eq','unavail') | list
+              %}
+
+              {% set unknown = ents | selectattr('state','eq','unknown') | list
+              %}
+
+              {% set disabled = ents | selectattr('state','eq','disabled') |
+              list %}
+
+              ## 🔍 Watchman — {{ ents | count }} fehlende Entitäten
+
+              | Status | Anzahl |
+
+              |--------|--------|
+
+              | 🔴 Missing | **{{ missing | count }}** |
+
+              | 🟠 Unavailable | **{{ unavail | count }}** |
+
+              | 🔵 Unknown | **{{ unknown | count }}** |
+
+              | ⚫ Disabled | **{{ disabled | count }}** |
+
+
+              *Stand: {{ states.sensor.watchman_missing_entities.last_changed |
+              as_timestamp | timestamp_custom('%d.%m.%Y %H:%M') }}*
+      - cards:
+          - type: heading
+            heading: 🔴 Missing — Entität existiert nicht
+          - type: markdown
+            content: >
+              {% set ents = state_attr('sensor.watchman_missing_entities',
+              'entities') | default([]) %}
+
+              {% set filtered = ents | selectattr('state','eq','missing') | list
+              %}
+
+              {% if filtered | count == 0 %}✅ Keine fehlenden Entitäten!
+
+              {% else %}| Entität | Datei | Zeilen |
+
+              |---------|-------|--------|
+
+              {% for e in filtered %}{% set occ = e.occurrences | default('')
+              %}{% for line in occ.split('\n') if line %}{% set parts =
+              line.split(':') %}| `{{ e.id }}` | {{ parts[0] }} | {{ parts[1] |
+              default('') }} |
+
+              {% endfor %}{% endfor %}{% endif %}
+            grid_options:
+              columns: full
+        column_span: 4
+      - cards:
+          - type: heading
+            heading: 🟠 Unavailable — Gerät offline
+          - type: markdown
+            content: >
+              {% set ents = state_attr('sensor.watchman_missing_entities',
+              'entities') | default([]) %}
+
+              {% set filtered = ents | selectattr('state','eq','unavail') | list
+              %}
+
+              {% if filtered | count == 0 %}✅ Alle Geräte erreichbar!
+
+              {% else %}| Entität | Name | Datei | Zeilen |
+
+              |---------|------|-------|--------|
+
+              {% for e in filtered %}{% set occ = e.occurrences | default('')
+              %}{% for line in occ.split('\n') if line %}{% set parts =
+              line.split(':') %}| `{{ e.id }}` | {{ e.friendly_name |
+              default('') }} | {{ parts[0] }} | {{ parts[1] | default('') }} |
+
+              {% endfor %}{% endfor %}{% endif %}
+            grid_options:
+              columns: full
+        column_span: 4
+      - cards:
+          - type: heading
+            heading: 🔵 Unknown — Noch kein Wert
+          - type: markdown
+            content: >
+              {% set ents = state_attr('sensor.watchman_missing_entities',
+              'entities') | default([]) %}
+
+              {% set filtered = ents | selectattr('state','eq','unknown') | list
+              %}
+
+              {% if filtered | count == 0 %}✅ Keine unknown Entitäten!
+
+              {% else %}| Entität | Name | Datei | Zeilen |
+
+              |---------|------|-------|--------|
+
+              {% for e in filtered %}{% set occ = e.occurrences | default('')
+              %}{% for line in occ.split('\n') if line %}{% set parts =
+              line.split(':') %}| `{{ e.id }}` | {{ e.friendly_name |
+              default('') }} | {{ parts[0] }} | {{ parts[1] | default('') }} |
+
+              {% endfor %}{% endfor %}{% endif %}
+            grid_options:
+              columns: full
+        column_span: 4
+      - cards:
+          - type: heading
+            heading: ⚫ Disabled — Entität deaktiviert
+          - type: markdown
+            content: >
+              {% set ents = state_attr('sensor.watchman_missing_entities',
+              'entities') | default([]) %}
+
+              {% set filtered = ents | selectattr('state','eq','disabled') |
+              list %}
+
+              {% if filtered | count == 0 %}✅ Keine deaktivierten Entitäten!
+
+              {% else %}| Entität | Datei | Zeilen |
+
+              |---------|-------|--------|
+
+              {% for e in filtered %}{% set occ = e.occurrences | default('')
+              %}{% for line in occ.split('\n') if line %}{% set parts =
+              line.split(':') %}| `{{ e.id }}` | {{ parts[0] }} | {{ parts[1] |
+              default('') }} |
+
+              {% endfor %}{% endfor %}{% endif %}
+            grid_options:
+              columns: full
+        column_span: 4
