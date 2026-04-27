@@ -403,6 +403,14 @@
           </div>
           <div class="ctrl-hint">Simuliertes Shelly-Messsrauschen</div>
         </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Intervall</label>
+            <input type="range" id="interval" min="100" max="5000" step="100" value="300" oninput="restartInterval()">
+            <span class="ctrl-val" id="interval-v">300 ms</span>
+          </div>
+          <div class="ctrl-hint">Aktualisierungsintervall — real: Shelly-Trigger alle ~2–5 s</div>
+        </div>
       </div>
     </div>
   </div>
@@ -471,6 +479,7 @@
   let nightMode    = false;
   let tick         = 0;
   let paused       = false;
+  let simTimer     = null;
   let chart;
 
   /* ── Slider helpers ───────────────────── */
@@ -594,6 +603,13 @@
     btn.textContent = paused ? '▶ Weiter' : '⏸ Pause';
     dot.style.animationPlayState = paused ? 'paused' : 'running';
     dot.style.background = paused ? 'var(--amber)' : 'var(--green)';
+    if (paused) { clearInterval(simTimer); simTimer = null; } else { restartInterval(); }
+  }
+  function restartInterval() {
+    const ms = parseInt(document.getElementById("interval").value, 10);
+    document.getElementById("interval-v").textContent = ms + " ms";
+    if (simTimer) clearInterval(simTimer);
+    simTimer = setInterval(simStep, ms);
   }
   function flash() {
     document.querySelectorAll('.metric-value').forEach(el => {
@@ -612,7 +628,8 @@
     load:  { id: 'load-v',  fmt: v => Math.round(v) + ' W' },
     pv:    { id: 'pv-v',    fmt: v => Math.round(v) + ' W' },
     db:    { id: 'db-v',    fmt: v => Math.round(v) + ' W' },
-    noise: { id: 'noise-v', fmt: v => Math.round(v) + ' W' },
+    noise:    { id: 'noise-v',    fmt: v => Math.round(v) + ' W' },
+    interval: { id: 'interval-v', fmt: v => Math.round(v) + ' ms' },
   };
   Object.entries(sliderMap).forEach(([id, cfg]) => {
     document.getElementById(id).addEventListener('input', e => {
@@ -708,7 +725,7 @@
       }
     });
 
-    setInterval(simStep, 300);
+    restartInterval();
   });
 </script>
 </body>
