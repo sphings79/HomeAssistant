@@ -1,8 +1,14 @@
 alias: Marstek Venus - Nulleinspeisung Regelung
 description: >
-  PI-Regler für Nulleinspeisung. Reagiert auf Shelly/EMMA-Änderungen. Kp=0.6,
-  Ki=0.05, Deadband 10W, Hysterese 5W, Clamp 0-2500W. Override wenn EMMA entlädt
-  und Marstek noch lädt. Fix: Integral wird immer gespeichert (vor Hysterese).
+  PI-Regler für Nulleinspeisung mit Marstek-Entladepriorität. Kp=0.6, Ki=0.02
+  (reduziert), Deadband 10W, Hysterese 5W, Clamp 0-2500W. FIX 1: error =
+  shelly_eff + max(-emma, 0) → Marstek-Priorität. FIX 2: Conditional Anti-Windup
+  (Software-Clamp). FIX 3: Back-Calculation Anti-Windup → Integral einfrieren
+  wenn Marstek
+          hardware-seitig limitiert ist (tatsächliche AC < Setpoint - 100W
+          und Fehler in gleicher Richtung). Verhindert Aufschaukeln gegen
+          physische Gerätegrenzen (SoC-Limit, Zellspannung etc.).
+  Integral-Clamp: ±800W (reduziert von ±1500W).
 triggers:
   - entity_id: sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power
     trigger: state
@@ -72,21 +78,41 @@ actions:
           current_output: >
             {{ states('number.marstek_venus_modbus_entladeleistung_einstellen')
             | float(0) | round(0) | int }}
+          actual_ac: >
+            {{ states('sensor.marstek_venus_modbus_ac_leistung') | float(0) |
+            round(0) | int }}
           old_integral: |
             {{ states('input_number.marstek_pi_integral') | float(0) }}
           dt: >
-            {% set last =
-            as_timestamp(states.sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power.last_changed)
-            %} {% set diff = now().timestamp() - last %} {{ [diff, 15] | min |
+            {% set last = as_timestamp(
+              states.sensor.hauptsicherung_shellypro3em_a0dd6ca0e0cc_total_active_power.last_changed
+            ) %} {% set diff = now().timestamp() - last %} {{ [diff, 15] | min |
             round(2) }}
       - variables:
           shelly_eff: |
             {{ (shelly - 15) if shelly > 0 else shelly }}
+          emma_discharge: |
+            {{ [(-emma), 0] | max }}
           error: |
-            {{ shelly_eff - emma }}
+            {{ (shelly_eff + emma_discharge) | round(0) | int }}
+          hardware_limited: |
+            {{ actual_ac < (current_output - 100) and current_output > 100 }}
           new_integral: >
-            {% set raw = old_integral + 0.05 * error * dt %} {{ [[raw, -1500] |
-            max, 1500] | min | round(2) }}
+            {% set i_raw = old_integral + 0.02 * error * dt %} {% set out_test =
+            (0.6 * error + i_raw) | round(0) | int %} {% if hardware_limited and
+            error > 0 %}
+              {# Back-Calculation: Hardware limitiert, Fehler positiv → einfrieren #}
+              {{ old_integral | round(2) }}
+            {% elif out_test <= 0 and error < 0 %}
+              {# Software-Clamp: Output wäre 0, Fehler negativ → einfrieren #}
+              {{ old_integral | round(2) }}
+            {% elif out_test >= 2500 and error > 0 %}
+              {# Software-Clamp: Output wäre 2500, Fehler positiv → einfrieren #}
+              {{ old_integral | round(2) }}
+            {% else %}
+              {# Normalbetrieb: integrieren mit reduziertem Ki=0.02, Clamp ±800W #}
+              {{ [[i_raw, -800] | max, 800] | min | round(2) }}
+            {% endif %}
           new_output: >
             {% set raw = (0.6 * error + new_integral) | round(0) | int %} {{
             [[raw, 0] | max, 2500] | min }}
