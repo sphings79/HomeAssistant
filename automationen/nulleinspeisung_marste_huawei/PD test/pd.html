@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PD-Regler Simulation – Marstek Nulleinspeisung</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:       #0f1117;
+    --surface:  #171b26;
+    --surface2: #1e2333;
+    --border:   #2a2f42;
+    --text:     #e8eaf0;
+    --muted:    #6b7280;
+    --blue:     #4a9eff;
+    --blue-dim: #1a3a5c;
+    --green:    #2dd4a0;
+    --green-dim:#0d3328;
+    --red:      #ff6b6b;
+    --red-dim:  #3d1515;
+    --amber:    #f59e0b;
+    --amber-dim:#3d2800;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+  }
+
+  /* ── Layout ─────────────────────────────── */
+  .page { max-width: 960px; margin: 0 auto; }
+
+  header { margin-bottom: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; }
+  header h1 { font-family: var(--mono); font-size: 1.4rem; font-weight: 500; color: var(--blue); letter-spacing: -0.01em; }
+  header p  { color: var(--muted); font-size: 0.9rem; margin-top: 0.3rem; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+
+  /* ── Cards ────────────────────────────────*/
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
+  .card h2 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Metric cards ──────────────────────── */
+  .metric {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .metric-label { font-size: 0.72rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .metric-value { font-family: var(--mono); font-size: 1.35rem; font-weight: 500; color: var(--text); transition: color 0.2s; }
+  .metric-sub   { font-size: 0.72rem; color: var(--muted); }
+
+  .metric.blue  { border-color: var(--blue-dim);  background: #121c2e; }
+  .metric.green { border-color: var(--green-dim); background: #0b1f1a; }
+  .metric.red   { border-color: var(--red-dim);   background: #1a0f0f; }
+
+  /* ── Concept boxes ────────────────────── */
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+
+  .concept-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.1rem 1.25rem;
+  }
+  .concept-box .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 0.6rem;
+  }
+  .tag-p { background: var(--blue-dim); color: var(--blue); }
+  .tag-d { background: var(--amber-dim); color: var(--amber); }
+  .tag-pd { background: var(--green-dim); color: var(--green); }
+
+  .concept-box h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.4rem; }
+  .concept-box p  { font-size: 0.85rem; color: var(--muted); line-height: 1.55; }
+  .concept-box .formula {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-top: 0.7rem;
+    color: var(--green);
+  }
+
+  /* ── Controls ─────────────────────────── */
+  .ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl-row { display: flex; align-items: center; gap: 10px; }
+  .ctrl-row label {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--muted);
+    min-width: 80px;
+  }
+  .ctrl-row input[type=range] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+  .ctrl-row input[type=range]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+  }
+  .ctrl-row input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--blue);
+    border: none;
+    cursor: pointer;
+  }
+  .ctrl-val {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text);
+    min-width: 50px;
+    text-align: right;
+  }
+  .ctrl-hint { font-size: 0.75rem; color: var(--muted); margin-left: 90px; margin-top: 2px; }
+
+  /* ── Buttons ──────────────────────────── */
+  .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  button {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover { background: var(--surface); border-color: var(--blue); color: var(--blue); }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+  button.success:hover { border-color: var(--green); color: var(--green); }
+
+  /* ── Chart ────────────────────────────── */
+  .chart-wrap { position: relative; width: 100%; height: 240px; }
+
+  /* ── Status bar ───────────────────────── */
+  .status-bar {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Legend ───────────────────────────── */
+  .legend { display: flex; gap: 1.5rem; margin-top: 0.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+  .legend-line { width: 22px; height: 2px; border-radius: 1px; }
+
+  /* ── Section header ───────────────────── */
+  .section-title {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Explanation text ─────────────────── */
+  .explain {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.65;
+    margin-bottom: 1.5rem;
+  }
+  .explain strong { color: var(--text); font-weight: 500; }
+  .explain code {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--green);
+  }
+
+  /* ── Responsive ───────────────────────── */
+  @media (max-width: 700px) {
+    .concept-grid { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ── Highlight flash ──────────────────── */
+  @keyframes flash { 0%{opacity:1} 50%{opacity:0.4} 100%{opacity:1} }
+  .flash { animation: flash 0.4s ease; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>// PD-Regler Simulation — Marstek Nulleinspeisung</h1>
+    <p>Interaktive Erklärung des Proportional-Derivative-Reglers für die Home Assistant Automation</p>
+  </header>
+
+  <!-- ── Erklärung ─────────────────────────────────────────── -->
+  <div class="section-title">Was ist ein PD-Regler?</div>
+
+  <p class="explain">
+    Ein Regler hat eine einfache Aufgabe: Er misst einen <strong>Fehler</strong> (hier: Netzbezug laut Shelly in Watt)
+    und steuert eine <strong>Stellgröße</strong> (hier: Marstek-Entladeleistung), um den Fehler auf null zu bringen.
+    Der PD-Regler macht das mit zwei Anteilen, die zusammenaddiert werden:
+  </p>
+
+  <div class="concept-grid">
+    <div class="concept-box">
+      <span class="tag tag-p">P – Proportional</span>
+      <h3>Wie weit bin ich jetzt daneben?</h3>
+      <p>
+        Schaut nur auf den <strong>aktuellen Fehler</strong>. Shelly zeigt +400&thinsp;W Netzbezug?
+        Dann fordert P genau <code>Kp × 400 = 320&thinsp;W</code> mehr Entladeleistung.
+        Einfach, reaktionsschnell — aber allein kann P überschwingen.
+      </p>
+      <div class="formula">P = Kp × error</div>
+    </div>
+    <div class="concept-box">
+      <span class="tag tag-d">D – Derivative</span>
+      <h3>Wie schnell ändert sich der Fehler?</h3>
+      <p>
+        Schaut auf die <strong>Änderungsrate</strong> des Fehlers. Fehler sinkt bereits schnell?
+        D bremst P ab, bevor Marstek zu weit regelt. Fehler wächst explosiv?
+        D gibt sofort Gas. Verhindert Pendeln ohne Integral-Aufwand.
+      </p>
+      <div class="formula">D = Kd × (error − prev_error) / dt</div>
+    </div>
+    <div class="concept-box">
+      <span class="tag tag-pd">P + D zusammen</span>
+      <h3>Schnell und trotzdem stabil</h3>
+      <p>
+        Die Stellgröße ist die Summe beider Anteile, addiert auf den aktuellen Ausgabewert
+        (<strong>Velocity-Form</strong>). Ein Rate-Limiter und ein Sprungmodus bei großen
+        Fehlern (&gt;400&thinsp;W) sorgen für robustes Verhalten.
+      </p>
+      <div class="formula">Δu = P + D → new_out = out + Δu</div>
+    </div>
+  </div>
+
+  <!-- ── Live-Metriken ─────────────────────────────────────── -->
+  <div class="section-title">Live-Werte</div>
+  <div class="grid-4">
+    <div class="metric red">
+      <div class="metric-label">Shelly (Netz)</div>
+      <div class="metric-value" id="m-shelly">–</div>
+      <div class="metric-sub">+ = Bezug, − = Einspeisung</div>
+    </div>
+    <div class="metric blue">
+      <div class="metric-label">P-Anteil</div>
+      <div class="metric-value" id="m-p">–</div>
+      <div class="metric-sub">Kp × Fehler</div>
+    </div>
+    <div class="metric" style="border-color:var(--amber-dim);background:#1a1500;">
+      <div class="metric-label">D-Anteil</div>
+      <div class="metric-value" id="m-d">–</div>
+      <div class="metric-sub">Kd × de/dt</div>
+    </div>
+    <div class="metric green">
+      <div class="metric-label">Marstek Setpoint</div>
+      <div class="metric-value" id="m-out">–</div>
+      <div class="metric-sub">Entladeleistung</div>
+    </div>
+  </div>
+
+  <!-- ── Controls ──────────────────────────────────────────── -->
+  <div class="grid-2">
+    <div class="card">
+      <h2>Regler-Parameter</h2>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Kp</label>
+            <input type="range" id="kp" min="0.1" max="1.5" step="0.1" value="0.8">
+            <span class="ctrl-val" id="kp-v">0.8</span>
+          </div>
+          <div class="ctrl-hint">Reaktionsstärke auf aktuellen Fehler</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Kd</label>
+            <input type="range" id="kd" min="0" max="2.0" step="0.1" value="0.3">
+            <span class="ctrl-val" id="kd-v">0.3</span>
+          </div>
+          <div class="ctrl-hint">Dämpfung — 0 = reiner P-Regler, höher = mehr Bremse</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Rate-Limit</label>
+            <input type="range" id="rl" min="50" max="1000" step="50" value="400">
+            <span class="ctrl-val" id="rl-v">400 W</span>
+          </div>
+          <div class="ctrl-hint">Max. Änderung pro Zyklus bei Netzbezug</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Sprung ab</label>
+            <input type="range" id="jt" min="100" max="1000" step="50" value="400">
+            <span class="ctrl-val" id="jt-v">400 W</span>
+          </div>
+          <div class="ctrl-hint">Fehler ab dem der Sprungmodus greift</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Anlage-Parameter</h2>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Hauslast</label>
+            <input type="range" id="load" min="100" max="3000" step="50" value="800">
+            <span class="ctrl-val" id="load-v">800 W</span>
+          </div>
+          <div class="ctrl-hint">Aktueller Stromverbrauch im Haus</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>PV-Leistung</label>
+            <input type="range" id="pv" min="0" max="9300" step="100" value="600">
+            <span class="ctrl-val" id="pv-v">600 W</span>
+          </div>
+          <div class="ctrl-hint">Aktuelle PV-Einspeisung (max. 9,3 kWp)</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Deadband</label>
+            <input type="range" id="db" min="0" max="100" step="5" value="35">
+            <span class="ctrl-val" id="db-v">35 W</span>
+          </div>
+          <div class="ctrl-hint">Fehler unter diesem Wert → kein Eingriff</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label>Rauschen</label>
+            <input type="range" id="noise" min="0" max="100" step="5" value="20">
+            <span class="ctrl-val" id="noise-v">20 W</span>
+          </div>
+          <div class="ctrl-hint">Simuliertes Shelly-Messsrauschen</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Ereignis-Buttons ───────────────────────────────────── -->
+  <div class="section-title">Ereignisse simulieren</div>
+  <div class="btn-row">
+    <button onclick="triggerSpike()" class="danger">⚡ Lastsprung +1000 W (Backofen an)</button>
+    <button onclick="triggerPvDrop()" class="danger">☁️ PV-Einbruch −500 W (Wolke)</button>
+    <button onclick="triggerPvSurplus()" class="success">☀️ PV-Überschuss +800 W (Sonne)</button>
+    <button onclick="triggerNightMode()">🌙 Nacht (PV = 0 W)</button>
+    <button onclick="resetSim()">↺ Reset</button>
+    <button onclick="togglePause()" id="pause-btn">⏸ Pause</button>
+  </div>
+
+  <!-- ── Erklärung der Buttons ─────────────────────────────── -->
+  <p class="explain" style="margin-bottom:1rem;">
+    <strong>Tipp:</strong> Stelle <strong>Kd = 0</strong> ein (reiner P-Regler) und drücke auf
+    „Lastsprung" — beobachte wie die rote Linie nach dem Sprung um die Nulllinie pendelt.
+    Erhöhe dann Kd auf <code>0.3–0.5</code> und wiederhole: das Pendeln verschwindet, weil D das
+    Überschwingen vorausahnt und abbremst. Je größer Kp, desto schneller — aber auch desto mehr
+    Neigung zum Schwingen ohne ausreichendes Kd.
+  </p>
+
+  <!-- ── Chart ─────────────────────────────────────────────── -->
+  <div class="section-title">Verlauf (letzte 80 Sekunden)</div>
+  <div class="status-bar"><span class="dot" id="dot"></span><span id="status-txt">Simulation läuft…</span></div>
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="Zeitverlauf von Netzleistung und Marstek-Setpoint"></canvas>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-line" style="background:var(--red)"></div>Shelly – Netzbezug/-einspeisung</div>
+    <div class="legend-item"><div class="legend-line" style="background:var(--green)"></div>Marstek – Entladesetpoint</div>
+    <div class="legend-item"><div class="legend-line" style="background:var(--blue);opacity:0.5;height:1px;border-top:2px dashed var(--blue)"></div>Nulllinie (Ziel)</div>
+  </div>
+
+  <!-- ── Formel-Übersicht ───────────────────────────────────── -->
+  <div style="margin-top:2rem;" class="card">
+    <h2>Vollständige Formel (wie in der HA-Automation)</h2>
+    <div style="font-family:var(--mono);font-size:0.82rem;color:var(--green);line-height:2;background:var(--bg);border-radius:6px;padding:1rem 1.2rem;margin-top:0.5rem;border:1px solid var(--border);">
+      error &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= shelly_eff + max(−emma, 0) &nbsp;&nbsp;&nbsp;&nbsp;// EMMA-Priorität<br>
+      derivative &nbsp;&nbsp;= (error − prev_error) / dt &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// D-Term<br>
+      raw_adj &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= Kp × error + Kd × derivative &nbsp;&nbsp;// P + D<br>
+      rate_adj &nbsp;&nbsp;&nbsp;&nbsp;= clamp(raw_adj, −700, +400) &nbsp;&nbsp;&nbsp;&nbsp;// asymm. Rate-Limit<br>
+      <span style="color:var(--amber);">// Sprungmodus bei großem Fehler:</span><br>
+      new_output &nbsp;&nbsp;= current + 0.8×error &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// wenn |error| > 400 W<br>
+      new_output &nbsp;&nbsp;= current + rate_adj &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// sonst (Velocity-Form)<br>
+      new_output &nbsp;&nbsp;= clamp(new_output, 0, 2500) &nbsp;&nbsp;&nbsp;&nbsp;// Hardware-Grenze
+    </div>
+  </div>
+
+</div><!-- .page -->
+
+<script>
+  const MAX_PTS = 80;
+  const DT = 5;
+
+  let shellyData   = Array(MAX_PTS).fill(null);
+  let marstekData  = Array(MAX_PTS).fill(null);
+  let labels       = Array(MAX_PTS).fill('');
+  let marstekOut   = 0;
+  let prevError    = 0;
+  let spikeTimer   = 0;
+  let pvDropTimer  = 0;
+  let pvSurpTimer  = 0;
+  let nightMode    = false;
+  let tick         = 0;
+  let paused       = false;
+  let chart;
+
+  /* ── Slider helpers ───────────────────── */
+  function sl(id) { return parseFloat(document.getElementById(id).value); }
+
+  function getLoad()  { return sl('load') + (spikeTimer > 0 ? 1000 : 0); }
+  function getPv() {
+    if (nightMode) return 0;
+    let base = sl('pv');
+    base -= (pvDropTimer > 0 ? 500 : 0);
+    base += (pvSurpTimer > 0 ? 800 : 0);
+    return Math.max(0, base);
+  }
+
+  /* ── Simulation step ──────────────────── */
+  function simStep() {
+    if (paused) return;
+    if (spikeTimer  > 0) spikeTimer--;
+    if (pvDropTimer > 0) pvDropTimer--;
+    if (pvSurpTimer > 0) pvSurpTimer--;
+
+    const Kp    = sl('kp');
+    const Kd    = sl('kd');
+    const rlPos = sl('rl');
+    const rlNeg = 700;
+    const jt    = sl('jt');
+    const db    = sl('db');
+    const noiseAmp = sl('noise');
+
+    const noise  = (Math.random() - 0.5) * 2 * noiseAmp;
+    const load   = getLoad();
+    const pv     = getPv();
+    const shelly = Math.round(load - pv - marstekOut + noise);
+
+    const shellyEff   = shelly > 0 ? shelly - 15 : shelly;
+    const error       = shellyEff;
+    const derivative  = (error - prevError) / DT;
+    const pTerm       = Kp * error;
+    const dTerm       = Kd * derivative;
+    const rawAdj      = pTerm + dTerm;
+
+    let rateAdj;
+    if (rawAdj < 0) rateAdj = Math.max(rawAdj, -rlNeg);
+    else            rateAdj = Math.min(rawAdj, rlPos);
+
+    let newOut;
+    if (Math.abs(error) > jt) {
+      newOut = marstekOut + 0.8 * error;
+    } else {
+      if (Math.abs(error) < db) {
+        newOut = marstekOut;
+      } else {
+        newOut = marstekOut + rateAdj;
+      }
+    }
+    newOut = Math.min(2500, Math.max(0, Math.round(newOut)));
+
+    if (Math.abs(shelly - marstekOut) > 5 || Math.abs(error) >= db) {
+      marstekOut = newOut;
+    }
+    prevError = error;
+    tick++;
+
+    /* ── Update metrics ─────────────────── */
+    const shellyEl = document.getElementById('m-shelly');
+    const pEl      = document.getElementById('m-p');
+    const dEl      = document.getElementById('m-d');
+    const outEl    = document.getElementById('m-out');
+
+    shellyEl.textContent = (shelly >= 0 ? '+' : '') + shelly + ' W';
+    shellyEl.style.color = shelly > db ? 'var(--red)' : shelly < -db ? 'var(--green)' : 'var(--text)';
+
+    pEl.textContent = (Math.round(pTerm) >= 0 ? '+' : '') + Math.round(pTerm) + ' W';
+    pEl.style.color = Math.abs(pTerm) > 50 ? 'var(--blue)' : 'var(--text)';
+
+    dEl.textContent = (Math.round(dTerm) >= 0 ? '+' : '') + Math.round(dTerm) + ' W';
+    dEl.style.color = Math.abs(dTerm) > 30 ? 'var(--amber)' : 'var(--text)';
+
+    outEl.textContent = marstekOut + ' W';
+    outEl.style.color = marstekOut > 100 ? 'var(--green)' : 'var(--text)';
+
+    /* ── Status bar ─────────────────────── */
+    const parts = [];
+    if (spikeTimer  > 0) parts.push('⚡ Lastsprung +1000 W (' + spikeTimer + ' Schritte)');
+    if (pvDropTimer > 0) parts.push('☁️  PV-Einbruch −500 W (' + pvDropTimer + ' Schritte)');
+    if (pvSurpTimer > 0) parts.push('☀️  PV +800 W (' + pvSurpTimer + ' Schritte)');
+    if (nightMode)       parts.push('🌙 Nachtmodus — PV = 0 W');
+    if (!parts.length)   parts.push('Last: ' + Math.round(load) + ' W | PV: ' + Math.round(pv) + ' W | Netz: ' + (shelly >= 0 ? '+' : '') + shelly + ' W');
+    document.getElementById('status-txt').textContent = parts.join('   ');
+
+    /* ── Chart data ─────────────────────── */
+    shellyData.push(shelly);
+    marstekData.push(marstekOut);
+    labels.push((tick * DT) + 's');
+    if (shellyData.length > MAX_PTS)  { shellyData.shift();  marstekData.shift(); labels.shift(); }
+
+    if (chart) {
+      chart.data.labels                  = [...labels];
+      chart.data.datasets[0].data        = [...shellyData];
+      chart.data.datasets[1].data        = [...marstekData];
+      chart.update('none');
+    }
+  }
+
+  /* ── Events ───────────────────────────── */
+  function triggerSpike()     { spikeTimer = 14; flash(); }
+  function triggerPvDrop()    { pvDropTimer = 16; nightMode = false; flash(); }
+  function triggerPvSurplus() { pvSurpTimer = 16; nightMode = false; flash(); }
+  function triggerNightMode() { nightMode = !nightMode; pvDropTimer = 0; pvSurpTimer = 0; flash(); }
+  function resetSim() {
+    marstekOut = 0; prevError = 0; spikeTimer = 0;
+    pvDropTimer = 0; pvSurpTimer = 0; nightMode = false; tick = 0;
+    shellyData = Array(MAX_PTS).fill(null);
+    marstekData = Array(MAX_PTS).fill(null);
+    labels = Array(MAX_PTS).fill('');
+  }
+  function togglePause() {
+    paused = !paused;
+    const btn = document.getElementById('pause-btn');
+    const dot = document.getElementById('dot');
+    btn.textContent = paused ? '▶ Weiter' : '⏸ Pause';
+    dot.style.animationPlayState = paused ? 'paused' : 'running';
+    dot.style.background = paused ? 'var(--amber)' : 'var(--green)';
+  }
+  function flash() {
+    document.querySelectorAll('.metric-value').forEach(el => {
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+    });
+  }
+
+  /* ── Slider live update ───────────────── */
+  const sliderMap = {
+    kp:    { id: 'kp-v',    fmt: v => v.toFixed(1) },
+    kd:    { id: 'kd-v',    fmt: v => v.toFixed(1) },
+    rl:    { id: 'rl-v',    fmt: v => Math.round(v) + ' W' },
+    jt:    { id: 'jt-v',    fmt: v => Math.round(v) + ' W' },
+    load:  { id: 'load-v',  fmt: v => Math.round(v) + ' W' },
+    pv:    { id: 'pv-v',    fmt: v => Math.round(v) + ' W' },
+    db:    { id: 'db-v',    fmt: v => Math.round(v) + ' W' },
+    noise: { id: 'noise-v', fmt: v => Math.round(v) + ' W' },
+  };
+  Object.entries(sliderMap).forEach(([id, cfg]) => {
+    document.getElementById(id).addEventListener('input', e => {
+      document.getElementById(cfg.id).textContent = cfg.fmt(parseFloat(e.target.value));
+    });
+  });
+
+  /* ── Chart init ───────────────────────── */
+  window.addEventListener('load', () => {
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [...labels],
+        datasets: [
+          {
+            label: 'Shelly (Netz)',
+            data: [...shellyData],
+            borderColor: '#ff6b6b',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.35,
+            fill: false,
+          },
+          {
+            label: 'Marstek Setpoint',
+            data: [...marstekData],
+            borderColor: '#2dd4a0',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.35,
+            fill: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: '#1e2333',
+            borderColor: '#2a2f42',
+            borderWidth: 1,
+            titleColor: '#6b7280',
+            bodyColor: '#e8eaf0',
+            titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+            bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12 },
+            callbacks: {
+              label: ctx => ' ' + ctx.dataset.label + ': ' + Math.round(ctx.parsed.y) + ' W'
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            ticks: { display: false },
+            grid: { color: '#1e2333', lineWidth: 1 }
+          },
+          y: {
+            min: -600,
+            max: 2700,
+            grid: { color: '#1e2333', lineWidth: 1 },
+            ticks: {
+              color: '#6b7280',
+              font: { family: "'IBM Plex Mono', monospace", size: 11 },
+              callback: v => v + ' W'
+            },
+            border: { color: '#2a2f42' }
+          }
+        }
+      }
+    });
+
+    /* Nulllinie */
+    Chart.register({
+      id: 'zeroline',
+      afterDraw(chart) {
+        const { ctx, scales: { y } } = chart;
+        const yZero = y.getPixelForValue(0);
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = 'rgba(74,158,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(chart.chartArea.left, yZero);
+        ctx.lineTo(chart.chartArea.right, yZero);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
+    setInterval(simStep, 300);
+  });
+</script>
+</body>
+</html>
