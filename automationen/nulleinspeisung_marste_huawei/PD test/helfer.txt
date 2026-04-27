@@ -1,0 +1,12 @@
+Helfer 1: Vorheriger Fehler (D-Term)
+  Marstek PD Vorheriger Fehler
+    Min -3000
+    Max 3000
+    Schrittweite 1
+    Einheit W
+Helfer 2: Letzter Ausführungs-Timestamp
+  Marstek PD Letzter Timestamp
+    Min 0
+    Max 9999999999
+    Schrittweite 0.1
+    Einheit s
