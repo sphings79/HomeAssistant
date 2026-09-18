@@ -1,53 +1,102 @@
 blueprint:
   name: Luftfeuchtigkeit Status & Differenz
-  description: Erstellt zwei Template-Sensoren für Lüftungsstatus und Feuchtigkeitsdifferenz eines Raumes.
+  description: >
+    Erstellt zwei Template-Sensoren für einen Raum: einen Status-Sensor
+    ("Möglich" / "NICHT empfohlen") und einen Sensor mit der absoluten
+    Feuchtigkeitsdifferenz zwischen Raum und Außenluft in g/m³.
+
+    Lüften bringt nur dann Feuchtigkeit aus dem Raum, wenn die *absolute*
+    Luftfeuchtigkeit drinnen höher ist als draußen. Die relative Feuchte taugt
+    dafür nicht, weil sie allein durch Abkühlen steigt.
+
+    Fällt einer der beiden Quellsensoren aus, werden beide Sensoren
+    "unavailable". Sie melden dann nicht stillschweigend eine Differenz von
+    0 g/m³ und damit ein falsches "NICHT empfohlen".
   domain: template
+  source_url: https://raw.githubusercontent.com/sphings79/HomeAssistant/refs/heads/main/blueprints/status_luften.yaml
   input:
     sensor_raum:
       name: Sensor Raum
-      description: Entität für absolute Luftfeuchtigkeit im Raum (z.B. sensor.thermal_comfort_bad_eg_absolute_luftfeuchtigkeit)
+      description: >
+        Entität für die absolute Luftfeuchtigkeit im Raum, z. B.
+        sensor.thermal_comfort_bad_eg_absolute_luftfeuchtigkeit
       selector:
         entity:
-          domain: sensor
+          domain:
+            - sensor
+          multiple: false
     sensor_aussen:
       name: Sensor Außen
-      description: Entität für absolute Luftfeuchtigkeit außen (z.B. sensor.thermal_comfort_garten_absolute_luftfeuchtigkeit)
+      description: >
+        Entität für die absolute Luftfeuchtigkeit außen, z. B.
+        sensor.thermal_comfort_garten_absolute_luftfeuchtigkeit
       selector:
         entity:
-          domain: sensor
+          domain:
+            - sensor
+          multiple: false
+    schwelle:
+      name: Schwelle
+      description: >
+        Ab dieser Differenz gilt Lüften als möglich. 0,1 g/m³ entspricht den
+        bestehenden Sensoren und liegt bewusst knapp über null.
+      default: 0.1
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: "g/m³"
+          mode: box
     status_name:
       name: Name Status Sensor
-      description: Anzeigename für den Status-Sensor (z.B. "Bad EG Status lüften")
+      description: Anzeigename für den Status-Sensor, z. B. "Bad EG Status lüften"
       selector:
-        text:
+        text: {}
     status_unique_id:
       name: Unique ID Status Sensor
-      description: Eindeutige ID für den Status-Sensor (z.B. "bad_eg_status_luften")
+      description: Eindeutige ID für den Status-Sensor, z. B. "bad_eg_status_luften"
       selector:
-        text:
+        text: {}
     diff_name:
       name: Name Differenz Sensor
-      description: Anzeigename für den Differenz-Sensor (z.B. "Bad EG Luftfeuchtigkeit Differenz")
+      description: Anzeigename für den Differenz-Sensor, z. B. "Bad EG Luftfeuchtigkeit Differenz"
       selector:
-        text:
+        text: {}
     diff_unique_id:
       name: Unique ID Differenz Sensor
-      description: Eindeutige ID für den Differenz-Sensor (z.B. "bad_eg_luftfeuchtigkeit_differenz")
+      description: Eindeutige ID für den Differenz-Sensor, z. B. "bad_eg_luftfeuchtigkeit_differenz"
       selector:
-        text:
+        text: {}
+
+# Section level variables are merged into every entity below, see
+# homeassistant/components/template/config.py:_merge_section_variables.
+# Binding the inputs here is what makes them usable inside the templates:
+# !input is a YAML tag, so writing states('!input sensor_raum') would look up
+# an entity literally named "!input sensor_raum".
+variables:
+  raum: !input sensor_raum
+  aussen: !input sensor_aussen
+  grenze: !input schwelle
 
 template:
   - sensor:
       - name: !input status_name
         unique_id: !input status_unique_id
+        icon: mdi:weather-windy
+        # Both sources must be numeric. Without this the sensor would report
+        # "NICHT empfohlen" during every dropout, which reads like a real
+        # measurement and is indistinguishable from one.
+        availability: "{{ is_number(states(raum)) and is_number(states(aussen)) }}"
         state: >
-          {% set diff = states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) %}
-          {% if diff > 0.5 %}
-            OK
-          {% else %}
-            NICHT OK
-          {% endif %}
+          {{ 'Möglich'
+             if ((states(raum) | float | round(1)) - (states(aussen) | float | round(1))) > (grenze | float)
+             else 'NICHT empfohlen' }}
+
       - name: !input diff_name
         unique_id: !input diff_unique_id
+        icon: mdi:delta
+        unit_of_measurement: "g/m³"
+        availability: "{{ is_number(states(raum)) and is_number(states(aussen)) }}"
         state: >
-          {{ states('!input sensor_raum')|float(0) - states('!input sensor_aussen')|float(0) }}
+          {{ "%.1f" | format((states(raum) | float | round(1)) - (states(aussen) | float | round(1))) }}
